@@ -1,5 +1,5 @@
 import { db } from '../db/db.js';
-import { toast } from '../app.js';
+import { toast } from '../utils/toast.js';
 import { formatMoney, formatDate } from '../utils/format.js';
 
 let currentPeriod = 'month'; // 'day', 'week', 'month'

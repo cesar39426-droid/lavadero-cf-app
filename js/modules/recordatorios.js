@@ -1,6 +1,6 @@
 import { db } from '../db/db.js';
 import { auth } from '../auth.js';
-import { toast } from '../app.js';
+import { toast } from '../utils/toast.js';
 import { daysSince, formatRelativeDate, formatDate } from '../utils/format.js';
 import { whatsappRecordatorio, openWhatsApp } from '../utils/whatsapp.js';
 
