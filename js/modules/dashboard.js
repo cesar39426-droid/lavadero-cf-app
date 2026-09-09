@@ -163,7 +163,7 @@ async function loadData() {
     document.getElementById('kpiIngresos').textContent = formatMoney(ingresos);
     document.getElementById('kpiLavados').textContent = cantidadLavados.toString();
     document.getElementById('kpiTicket').textContent = formatMoney(ticketPromedio);
-    document.getElementById('kpiRecurrentes').textContent = \`\${porcentajeRecurrentes}%\`;
+    document.getElementById('kpiRecurrentes').textContent = `${porcentajeRecurrentes}%`;
 
     // Recordatorios (30+ días sin lavar)
     const thirtyDaysAgo = new Date();
@@ -276,9 +276,9 @@ async function loadData() {
         empList.innerHTML = '<li class="empty-state">No hay lavados registrados esta semana.</li>';
       } else {
         empList.innerHTML = empleadosArr.map(e => 
-          \`<li>
-            <strong>\${e.nombre}</strong>: \${e.lavados} lavados - \${formatMoney(e.total)}
-          </li>\`
+          `<li>
+            <strong>${e.nombre}</strong>: ${e.lavados} lavados - ${formatMoney(e.total)}
+          </li>`
         ).join('');
       }
     }
@@ -289,7 +289,7 @@ async function loadData() {
       try {
         const recomendaciones = await generarRecomendaciones();
         if (recomendaciones && recomendaciones.length > 0) {
-          iaList.innerHTML = recomendaciones.slice(0, 2).map(r => \`<li>\${r.texto || r}</li>\`).join('');
+          iaList.innerHTML = recomendaciones.slice(0, 2).map(r => `<li>${r.texto || r}</li>`).join('');
         } else {
           iaList.innerHTML = '<li class="empty-state">Sin recomendaciones por el momento.</li>';
         }

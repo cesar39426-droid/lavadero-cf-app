@@ -231,7 +231,7 @@ export async function init() {
                 const url = URL.createObjectURL(blob);
                 
                 const date = new Date().toISOString().split('T')[0];
-                const filename = \`lavaderocf-backup-\${date}.json\`;
+                const filename = `lavaderocf-backup-${date}.json`;
                 
                 const a = document.createElement('a');
                 a.href = url;
@@ -337,7 +337,7 @@ export async function init() {
                 // Prueba de API simple contra un endpoint público que requiera Auth
                 // (Grok compatible API via xAI o Groq)
                 const res = await fetch('https://api.groq.com/openai/v1/models', {
-                    headers: { 'Authorization': \`Bearer \${key}\` }
+                    headers: { 'Authorization': `Bearer ${key}` }
                 });
                 
                 if (res.ok) {
@@ -375,7 +375,7 @@ export async function init() {
         btnViewQr.addEventListener('click', () => {
             if (qrContainer.style.display === 'none') {
                 const encodedUrl = encodeURIComponent(inputUrl.value);
-                qrImage.src = \`https://api.qrserver.com/v1/create-qr-code/?data=\${encodedUrl}&size=200x200\`;
+                qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?data=${encodedUrl}&size=200x200`;
                 qrContainer.style.display = 'block';
                 btnViewQr.textContent = 'Ocultar QR';
             } else {

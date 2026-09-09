@@ -257,13 +257,13 @@ export async function init() {
                 // HOOK IA EXTERNA — Reemplazar con la llamada real a la API
                 // const res = await fetch('https://api.grok.ai/v1/chat/completions', {
                 //     method: 'POST',
-                //     headers: { 'Authorization': \`Bearer \${apiKey}\`, 'Content-Type': 'application/json' },
+                //     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
                 //     body: JSON.stringify({ messages: [{role: 'user', content: input}] })
                 // });
                 // const data = await res.json();
                 
                 setTimeout(() => {
-                    resContainer.innerHTML = \`<p class="m-0"><strong>Grok dice:</strong> Simulación de respuesta para "\${input}". (Se requiere implementar el endpoint real de la API de Grok).</p>\`;
+                    resContainer.innerHTML = `<p class="m-0"><strong>Grok dice:</strong> Simulación de respuesta para "${input}". (Se requiere implementar el endpoint real de la API de Grok).</p>`;
                 }, 1500);
             } catch (error) {
                 console.error(error);

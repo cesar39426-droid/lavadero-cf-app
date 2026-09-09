@@ -96,15 +96,15 @@ function updateProgress() {
     }
     document.getElementById('stepper-progress').style.display = 'block';
     const titles = ["Servicio", "Fecha y Horario", "Tus Datos"];
-    document.getElementById('step-indicator').textContent = \`Paso \${currentStep} de 3 — \${titles[currentStep-1]}\`;
-    document.getElementById('progress-fill').style.width = \`\${(currentStep / 3) * 100}%\`;
+    document.getElementById('step-indicator').textContent = `Paso ${currentStep} de 3 — ${titles[currentStep-1]}`;
+    document.getElementById('progress-fill').style.width = `${(currentStep / 3) * 100}%`;
 
     // Hide all, show current
     [1, 2, 3, 'success'].forEach(step => {
-        const el = document.getElementById(\`step-\${step}\`);
+        const el = document.getElementById(`step-${step}`);
         if (el) el.style.display = 'none';
     });
-    const currentEl = document.getElementById(\`step-\${currentStep}\`);
+    const currentEl = document.getElementById(`step-${currentStep}`);
     if (currentEl) currentEl.style.display = 'block';
 }
 
@@ -123,35 +123,35 @@ async function renderStep1() {
         ];
     }
 
-    let html = \`
+    let html = `
         <div class="vehiculo-selector">
             <h3>Tipo de Vehículo</h3>
             <div class="vehiculo-options">
-                <button class="btn-vehiculo \${bookingData.tipoVehiculo === 'Auto' ? 'selected' : ''}" data-tipo="Auto">🚗 Auto</button>
-                <button class="btn-vehiculo \${bookingData.tipoVehiculo === 'Camioneta-Familiar' ? 'selected' : ''}" data-tipo="Camioneta-Familiar">🚙 Familiar</button>
-                <button class="btn-vehiculo \${bookingData.tipoVehiculo === '4x4' ? 'selected' : ''}" data-tipo="4x4">🛻 4x4</button>
+                <button class="btn-vehiculo ${bookingData.tipoVehiculo === 'Auto' ? 'selected' : ''}" data-tipo="Auto">🚗 Auto</button>
+                <button class="btn-vehiculo ${bookingData.tipoVehiculo === 'Camioneta-Familiar' ? 'selected' : ''}" data-tipo="Camioneta-Familiar">🚙 Familiar</button>
+                <button class="btn-vehiculo ${bookingData.tipoVehiculo === '4x4' ? 'selected' : ''}" data-tipo="4x4">🛻 4x4</button>
             </div>
         </div>
         
         <div class="servicio-selector">
             <h3>Seleccioná el Servicio</h3>
             <div class="servicio-list">
-                \${servicios.map(s => \`
-                    <div class="card-servicio \${bookingData.servicioId === s.id ? 'selected' : ''}" data-id="\${s.id}" data-nombre="\${s.nombre}" data-precio="\${s.precio}">
+                ${servicios.map(s => `
+                    <div class="card-servicio ${bookingData.servicioId === s.id ? 'selected' : ''}" data-id="${s.id}" data-nombre="${s.nombre}" data-precio="${s.precio}">
                         <div class="servicio-info">
-                            <h4>\${s.nombre}</h4>
-                            <p>\${s.descripcion || ''}</p>
+                            <h4>${s.nombre}</h4>
+                            <p>${s.descripcion || ''}</p>
                         </div>
                         <div class="servicio-precio">
-                            \${formatMoney ? formatMoney(s.precio) : '$' + s.precio}
+                            ${formatMoney ? formatMoney(s.precio) : '$' + s.precio}
                         </div>
                     </div>
-                \`).join('')}
+                `).join('')}
             </div>
         </div>
 
         <button id="btn-next-1" class="btn-primary mt-4" disabled>Siguiente</button>
-    \`;
+    `;
     
     container.innerHTML = html;
 
@@ -199,16 +199,16 @@ async function renderStep2() {
         bookingData.fecha = nextDays[0].fechaRaw; // default to first
     }
 
-    container.innerHTML = \`
+    container.innerHTML = `
         <button class="btn-secondary btn-back" id="btn-back-1">← Volver</button>
         <div class="dias-selector">
             <h3>Día</h3>
             <div class="dias-tabs">
-                \${nextDays.map(d => \`
-                    <button class="btn-dia \${bookingData.fecha === d.fechaRaw ? 'selected' : ''}" data-fecha="\${d.fechaRaw}">
-                        \${d.fechaCorta}
+                ${nextDays.map(d => `
+                    <button class="btn-dia ${bookingData.fecha === d.fechaRaw ? 'selected' : ''}" data-fecha="${d.fechaRaw}">
+                        ${d.fechaCorta}
                     </button>
-                \`).join('')}
+                `).join('')}
             </div>
         </div>
         
@@ -220,7 +220,7 @@ async function renderStep2() {
         </div>
 
         <button id="btn-next-2" class="btn-primary mt-4" disabled>Siguiente</button>
-    \`;
+    `;
 
     document.getElementById('btn-back-1').addEventListener('click', async () => {
         currentStep = 1;
@@ -281,7 +281,7 @@ async function updateHorarios() {
     while (currentMin + duracionMin <= endMin) {
         const h = Math.floor(currentMin / 60);
         const m = currentMin % 60;
-        const horaStr = \`\${String(h).padStart(2, '0')}:\${String(m).padStart(2, '0')}\`;
+        const horaStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         
         // Simple overlap check
         const isOccupied = turnosDelDia.some(t => {
@@ -302,11 +302,11 @@ async function updateHorarios() {
         return;
     }
 
-    grid.innerHTML = slots.map(s => \`
-        <button class="btn-hora \${bookingData.hora === s ? 'selected' : ''}" data-hora="\${s}">
-            \${s}
+    grid.innerHTML = slots.map(s => `
+        <button class="btn-hora ${bookingData.hora === s ? 'selected' : ''}" data-hora="${s}">
+            ${s}
         </button>
-    \`).join('');
+    `).join('');
 
     grid.querySelectorAll('.btn-hora').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -322,7 +322,7 @@ async function renderStep3() {
     const container = document.getElementById('step-3');
     updateProgress();
 
-    container.innerHTML = \`
+    container.innerHTML = `
         <button class="btn-secondary btn-back" id="btn-back-2">← Volver</button>
         <div class="datos-form">
             <h3>Tus Datos</h3>
@@ -330,23 +330,23 @@ async function renderStep3() {
             
             <div class="form-group">
                 <label for="cliente-telefono">Teléfono</label>
-                <input type="tel" id="cliente-telefono" class="form-control" placeholder="Ej: 11 1234 5678" value="\${bookingData.clienteTelefono}">
+                <input type="tel" id="cliente-telefono" class="form-control" placeholder="Ej: 11 1234 5678" value="${bookingData.clienteTelefono}">
             </div>
             <div class="form-group">
                 <label for="cliente-nombre">Nombre Completo</label>
-                <input type="text" id="cliente-nombre" class="form-control" placeholder="Ej: Juan Pérez" value="\${bookingData.clienteNombre}">
+                <input type="text" id="cliente-nombre" class="form-control" placeholder="Ej: Juan Pérez" value="${bookingData.clienteNombre}">
             </div>
         </div>
         
         <div class="resumen-reserva">
             <h4>Resumen</h4>
-            <p><strong>Servicio:</strong> \${bookingData.servicioNombre} (\${bookingData.tipoVehiculo})</p>
-            <p><strong>Día:</strong> \${formatDate ? formatDate(bookingData.fecha) : bookingData.fecha} a las \${bookingData.hora}</p>
-            <p><strong>Total a pagar:</strong> \${formatMoney ? formatMoney(bookingData.precio) : '$' + bookingData.precio}</p>
+            <p><strong>Servicio:</strong> ${bookingData.servicioNombre} (${bookingData.tipoVehiculo})</p>
+            <p><strong>Día:</strong> ${formatDate ? formatDate(bookingData.fecha) : bookingData.fecha} a las ${bookingData.hora}</p>
+            <p><strong>Total a pagar:</strong> ${formatMoney ? formatMoney(bookingData.precio) : '$' + bookingData.precio}</p>
         </div>
 
         <button id="btn-confirmar" class="btn-primary mt-4" disabled>Confirmar Reserva</button>
-    \`;
+    `;
 
     document.getElementById('btn-back-2').addEventListener('click', async () => {
         currentStep = 2;
@@ -376,7 +376,7 @@ async function renderStep3() {
                         bookingData.clienteNombre = clienteExistente.nombre;
                         
                         const banner = document.getElementById('cliente-banner');
-                        banner.innerHTML = \`¡Bienvenido de vuelta, <strong>\${clienteExistente.nombre}</strong>! Tus datos ya están en nuestro sistema.\`;
+                        banner.innerHTML = `¡Bienvenido de vuelta, <strong>${clienteExistente.nombre}</strong>! Tus datos ya están en nuestro sistema.`;
                         banner.style.display = 'block';
                         checkStep3Complete();
                     } else {
@@ -404,7 +404,7 @@ async function renderStep3() {
     checkStep3Complete();
     
     if(bookingData.clienteNombre) {
-        document.getElementById('cliente-banner').innerHTML = \`¡Bienvenido de vuelta, <strong>\${bookingData.clienteNombre}</strong>!\`;
+        document.getElementById('cliente-banner').innerHTML = `¡Bienvenido de vuelta, <strong>${bookingData.clienteNombre}</strong>!`;
         document.getElementById('cliente-banner').style.display = 'block';
     }
 }
@@ -462,15 +462,15 @@ async function renderSuccess() {
     document.getElementById('step-3').style.display = 'none';
     container.style.display = 'flex';
 
-    container.innerHTML = \`
+    container.innerHTML = `
         <div class="success-content">
             <div class="check-icon">✓</div>
             <h2>¡Tu turno está reservado!</h2>
             <div class="resumen-final">
-                <p><strong>Servicio:</strong> \${bookingData.servicioNombre} (\${bookingData.tipoVehiculo})</p>
-                <p><strong>Día:</strong> \${formatDate ? formatDate(bookingData.fecha) : bookingData.fecha}</p>
-                <p><strong>Hora:</strong> \${bookingData.hora}</p>
-                <p><strong>Total:</strong> \${formatMoney ? formatMoney(bookingData.precio) : '$' + bookingData.precio}</p>
+                <p><strong>Servicio:</strong> ${bookingData.servicioNombre} (${bookingData.tipoVehiculo})</p>
+                <p><strong>Día:</strong> ${formatDate ? formatDate(bookingData.fecha) : bookingData.fecha}</p>
+                <p><strong>Hora:</strong> ${bookingData.hora}</p>
+                <p><strong>Total:</strong> ${formatMoney ? formatMoney(bookingData.precio) : '$' + bookingData.precio}</p>
             </div>
             
             <div class="success-actions">
@@ -478,13 +478,13 @@ async function renderSuccess() {
                 <button id="btn-home" class="btn-primary mt-3">Volver al inicio</button>
             </div>
         </div>
-    \`;
+    `;
 
     document.getElementById('btn-calendar').addEventListener('click', () => {
         if (downloadICS) {
             downloadICS({
-                title: \`Turno LavaderoCF - \${bookingData.servicioNombre}\`,
-                description: \`Reserva para \${bookingData.tipoVehiculo}.\`,
+                title: `Turno LavaderoCF - ${bookingData.servicioNombre}`,
+                description: `Reserva para ${bookingData.tipoVehiculo}.`,
                 date: bookingData.fecha,
                 time: bookingData.hora,
                 duration: bookingData.tipoVehiculo === '4x4' ? 120 : (bookingData.tipoVehiculo === 'Camioneta-Familiar' ? 90 : 60)
@@ -508,7 +508,7 @@ function generateFallbackDays(count) {
         d.setDate(d.getDate() + i + 1); // start tomorrow
         days.push({
             fechaRaw: d.toISOString().split('T')[0],
-            fechaCorta: \`\${nombres[d.getDay()]}, \${d.getDate()} \${d.toLocaleString('es-AR', {month: 'short'})}\`
+            fechaCorta: `${nombres[d.getDay()]}, ${d.getDate()} ${d.toLocaleString('es-AR', {month: 'short'})}`
         });
     }
     return days;
@@ -518,7 +518,7 @@ function injectStyles() {
     if (document.getElementById('turnos-styles')) return;
     const style = document.createElement('style');
     style.id = 'turnos-styles';
-    style.textContent = \`
+    style.textContent = `
         .turnos-module {
             max-width: 600px;
             margin: 0 auto;
@@ -766,6 +766,6 @@ function injectStyles() {
         .success-actions {
             width: 100%;
         }
-    \`;
+    `;
     document.head.appendChild(style);
 }
