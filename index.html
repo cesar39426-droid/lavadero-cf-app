@@ -1,108 +1,1720 @@
 <!DOCTYPE html>
-<html lang="es" dir="ltr">
+<html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#000000" />
-  <meta name="description" content="LavaderoCF — El esplendor que tu coche merece. App de gestión." />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="LavaderoCF" />
-  <meta name="mobile-web-app-capable" content="yes" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#000000"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="LavaderoCF"/>
+<title>LavaderoCF</title>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+/* ── RESET ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;color:#f5f0e8;font-family:'Inter',system-ui,sans-serif;font-size:16px;-webkit-tap-highlight-color:transparent}
+button{cursor:pointer;border:none;font-family:inherit}
+a{text-decoration:none;color:inherit}
+img{max-width:100%;display:block}
+input,select,textarea{font-family:inherit}
 
-  <title>LavaderoCF</title>
+/* ── TOKENS ── */
+:root{
+  --bg:#000;--surface:#111;--surface2:#1e1e1e;
+  --gold:#c9a227;--gold-dim:rgba(201,162,39,.25);
+  --text:#f5f0e8;--muted:#888;
+  --success:#4caf7d;--danger:#e05c5c;--warn:#f0a500;
+  --r-sm:10px;--r-md:16px;--r-lg:24px;
+  --touch:52px;
+}
 
-  <!-- PWA Manifest -->
-  <link rel="manifest" href="manifest.json" />
+/* ── SPLASH ── */
+#splash{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:9999;transition:opacity .5s}
+#splash img{width:120px;height:120px;border-radius:50%;border:2px solid var(--gold-dim);object-fit:cover;animation:glow 2s ease-in-out infinite alternate}
+#splash h1{font-family:'Playfair Display',serif;color:var(--gold);font-size:1.9rem}
+#splash p{color:var(--muted);font-size:.85rem;letter-spacing:.06em}
+.splash-bar{width:160px;height:2px;background:var(--surface2);border-radius:2px;overflow:hidden;margin-top:8px}
+.splash-fill{height:100%;background:var(--gold);animation:load 1.6s ease forwards}
+@keyframes glow{from{box-shadow:0 0 8px var(--gold-dim)}to{box-shadow:0 0 28px rgba(201,162,39,.6)}}
+@keyframes load{from{width:0}to{width:100%}}
 
-  <!-- Apple Touch Icons -->
-  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/icon-192.png" />
+/* ── APP SHELL ── */
+#app{display:none;height:100%}
+.screen{display:none;min-height:100vh}
+.screen.active{display:flex}
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
+/* ── LOGIN ── */
+#screen-login{flex-direction:column;align-items:center;justify-content:center;padding:24px;background:#000}
+.auth-card{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--gold-dim);border-radius:var(--r-lg);padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:16px}
+.auth-logo{width:90px;height:90px;border-radius:50%;border:2px solid var(--gold-dim);object-fit:cover}
+.auth-title{font-family:'Playfair Display',serif;color:var(--gold);font-size:1.7rem;font-weight:700}
+.auth-slogan{color:var(--muted);font-size:.82rem;letter-spacing:.04em}
+.divider{width:100%;height:1px;background:var(--gold-dim)}
+.field-label{color:var(--muted);font-size:.83rem;font-weight:500;width:100%}
+select.field{width:100%;padding:13px 16px;background:var(--surface2);border:1px solid #333;border-radius:var(--r-sm);color:var(--text);font-size:1rem;appearance:none;min-height:var(--touch);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px}
+select.field:focus{outline:none;border-color:var(--gold)}
+.pin-section{width:100%;display:flex;flex-direction:column;align-items:center;gap:14px}
+.pin-dots{display:flex;gap:14px}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid #444;background:transparent;transition:all .15s}
+.pin-dot.on{background:var(--gold);border-color:var(--gold)}
+.pin-dot.err{background:var(--danger);border-color:var(--danger)}
+.pin-kb{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:256px}
+.pin-btn{aspect-ratio:1;background:var(--surface2);border:1px solid #2a2a2a;border-radius:var(--r-md);color:var(--text);font-size:1.3rem;font-weight:500;min-height:56px;display:flex;align-items:center;justify-content:center;transition:transform .1s,background .1s;user-select:none}
+.pin-btn:active{transform:scale(.91);background:var(--gold-dim)}
+.pin-btn.ok{background:var(--gold);color:#000;font-weight:700;font-size:1rem}
+.pin-btn.ok:disabled{background:var(--surface2);color:var(--muted)}
+.pin-btn.del{color:var(--muted);font-size:1.5rem}
+.btn-link{background:transparent;border:1px solid var(--gold-dim);color:var(--muted);border-radius:var(--r-sm);padding:13px 20px;width:100%;font-size:.9rem;transition:border-color .2s,color .2s}
+.btn-link:hover{border-color:var(--gold);color:var(--gold)}
+.auth-ver{color:#444;font-size:.72rem}
 
-  <!-- Google Fonts — preconectado para performance -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap"
-    rel="stylesheet"
-  />
+/* ── MAIN LAYOUT ── */
+#screen-main{flex-direction:column;background:#000}
+.top-bar{position:fixed;top:0;left:0;right:0;height:58px;background:var(--surface);border-bottom:1px solid #1e1e1e;display:flex;align-items:center;justify-content:space-between;padding:0 16px;z-index:100}
+.top-bar-logo{font-family:'Playfair Display',serif;color:var(--gold);font-size:1.1rem}
+.top-bar-user{color:var(--muted);font-size:.82rem}
+.page-content{margin-top:58px;margin-bottom:68px;padding:16px;overflow-y:auto;min-height:calc(100vh - 126px)}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:68px;background:var(--surface);border-top:1px solid #1e1e1e;display:flex;justify-content:space-around;align-items:center;z-index:100;padding-bottom:env(safe-area-inset-bottom)}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);padding:8px 16px;border-radius:var(--r-sm);min-width:56px;background:none;border:none;font-size:.7rem;transition:color .2s;cursor:pointer}
+.nav-item.active{color:var(--gold)}
+.nav-item svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 
-  <!-- CSS Layer (orden importa) -->
-  <link rel="stylesheet" href="css/tokens.css" />
-  <link rel="stylesheet" href="css/base.css" />
-  <link rel="stylesheet" href="css/components.css" />
-  <link rel="stylesheet" href="css/layout.css" />
-  <link rel="stylesheet" href="css/animations.css" />
-  <link rel="stylesheet" href="css/login.css" />
+/* ── VIEWS INSIDE MAIN ── */
+.view{display:none}
+.view.active{display:block}
+.view-title{font-family:'Playfair Display',serif;color:var(--gold);font-size:1.3rem;margin-bottom:4px}
+.view-sub{color:var(--muted);font-size:.82rem;margin-bottom:20px}
+.section-head{color:var(--gold);font-size:.78rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--gold-dim)}
+
+/* ── CARDS / LISTS ── */
+.card{background:var(--surface);border:1px solid #222;border-radius:var(--r-md);padding:16px;margin-bottom:12px}
+.card-gold{border-color:var(--gold-dim)}
+.list-row{background:var(--surface);border:1px solid #1e1e1e;border-radius:var(--r-sm);padding:14px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;min-height:var(--touch)}
+.list-row-left{display:flex;flex-direction:column;gap:3px}
+.row-title{font-weight:600;font-size:.95rem}
+.row-sub{color:var(--muted);font-size:.78rem}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center;gap:10px;color:var(--muted)}
+.empty-icon{font-size:3rem}
+
+/* ── CHIPS / BADGES ── */
+.chip{display:inline-flex;align-items:center;padding:4px 10px;border-radius:20px;font-size:.72rem;font-weight:600}
+.chip-wait{background:rgba(136,136,136,.15);color:#888}
+.chip-proc{background:rgba(201,162,39,.15);color:var(--gold)}
+.chip-done{background:rgba(76,175,125,.15);color:var(--success)}
+.badge-count{background:var(--danger);color:#fff;border-radius:20px;padding:2px 8px;font-size:.72rem;font-weight:700;min-width:20px;text-align:center}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:13px 20px;border-radius:var(--r-sm);font-size:.95rem;font-weight:600;min-height:var(--touch);border:none;transition:opacity .15s,transform .1s;cursor:pointer}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--gold);color:#000}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid #333}
+.btn-danger{background:rgba(224,92,92,.15);color:var(--danger);border:1px solid var(--danger)}
+.btn-wa{background:#25D366;color:#fff}
+.btn-full{width:100%}
+.btn-sm{padding:8px 14px;font-size:.82rem;min-height:36px}
+
+/* ── INPUTS ── */
+.input{width:100%;padding:13px 16px;background:var(--surface2);border:1px solid #333;border-radius:var(--r-sm);color:var(--text);font-size:1rem;min-height:var(--touch)}
+.input:focus{outline:none;border-color:var(--gold)}
+.input-label{color:var(--muted);font-size:.83rem;font-weight:500;display:block;margin-bottom:6px}
+.input-group{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
+.form-actions{display:flex;gap:10px;margin-top:16px}
+
+/* ── SEARCH ── */
+.search-wrap{position:relative;margin-bottom:14px}
+.search-input{width:100%;padding:13px 16px 13px 42px;background:var(--surface2);border:1px solid #333;border-radius:var(--r-sm);color:var(--text);font-size:.95rem;min-height:var(--touch)}
+.search-input:focus{outline:none;border-color:var(--gold)}
+.search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:1rem;pointer-events:none}
+.suggestions{background:var(--surface);border:1px solid var(--gold-dim);border-radius:var(--r-sm);margin-top:4px;overflow:hidden;display:none}
+.suggestion-item{padding:12px 16px;cursor:pointer;border-bottom:1px solid #1e1e1e;font-size:.9rem}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover{background:var(--surface2)}
+
+/* ── STAT CARDS ── */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.stat-card{background:var(--surface);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:16px}
+.stat-label{color:var(--muted);font-size:.72rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px}
+.stat-val{color:var(--gold);font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:700}
+.stat-hint{color:var(--muted);font-size:.72rem;margin-top:2px}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:800;display:none;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-box{background:var(--surface);border-radius:var(--r-lg) var(--r-lg) 0 0;border:1px solid var(--gold-dim);border-bottom:none;padding:24px 20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;animation:slideUp .3s ease}
+.modal-title{font-family:'Playfair Display',serif;color:var(--gold);font-size:1.15rem;margin-bottom:16px}
+@keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* ── TOAST ── */
+#toast-container{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9000;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.toast{padding:11px 20px;border-radius:24px;font-size:.87rem;font-weight:600;color:#000;animation:toastIn .25s ease;white-space:nowrap;max-width:90vw;pointer-events:none}
+.toast-success{background:var(--success)}
+.toast-error{background:var(--danger);color:#fff}
+.toast-info{background:var(--gold)}
+.toast-warn{background:var(--warn)}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── TIMER ── */
+.timer{font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.timer.warn{color:var(--warn)}
+
+/* ── SERVICES GRID ── */
+.services-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:16px}
+.service-card{background:var(--surface2);border:2px solid #2a2a2a;border-radius:var(--r-md);padding:14px;cursor:pointer;transition:border-color .2s}
+.service-card.selected{border-color:var(--gold)}
+.service-name{font-weight:600;margin-bottom:2px}
+.service-price{color:var(--gold);font-weight:700}
+.service-desc{color:var(--muted);font-size:.78rem;margin-top:4px}
+
+/* ── VEHICLE TYPES ── */
+.vehicle-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.vehicle-btn{background:var(--surface2);border:2px solid #2a2a2a;border-radius:var(--r-md);padding:12px 8px;cursor:pointer;text-align:center;transition:border-color .2s;font-size:.82rem;font-weight:500;color:var(--text)}
+.vehicle-btn .icon{font-size:1.5rem;display:block;margin-bottom:4px}
+.vehicle-btn.selected{border-color:var(--gold);color:var(--gold)}
+
+/* ── STEPPER (reservas) ── */
+.stepper{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:24px}
+.step{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;border:2px solid #333;color:var(--muted);font-size:.8rem;font-weight:700;flex-shrink:0}
+.step.done{border-color:var(--success);background:var(--success);color:#fff}
+.step.active{border-color:var(--gold);color:var(--gold)}
+.step-line{flex:1;height:1px;background:#333;max-width:40px}
+.step-label{font-size:.78rem;color:var(--muted);text-align:center;margin-top:-6px}
+
+/* ── MISC ── */
+.text-gold{color:var(--gold)}
+.text-muted{color:var(--muted)}
+.text-success{color:var(--success)}
+.text-danger{color:var(--danger)}
+.text-right{text-align:right}
+.flex-between{display:flex;justify-content:space-between;align-items:center}
+.flex-gap{display:flex;gap:10px;align-items:center}
+.mt-sm{margin-top:8px}
+.mt-md{margin-top:16px}
+.mb-md{margin-bottom:16px}
+.font-serif{font-family:'Playfair Display',serif}
+.fw-bold{font-weight:700}
+.hr{height:1px;background:var(--gold-dim);margin:16px 0}
+
+/* ── RESERVA SCREEN ── */
+#screen-reserva{flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px;background:#000;min-height:100vh}
+.reserva-card{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--gold-dim);border-radius:var(--r-lg);padding:24px 20px}
+.reserva-logo{width:64px;height:64px;border-radius:50%;border:1px solid var(--gold-dim);object-fit:cover;margin:0 auto 12px}
+.reserva-title{font-family:'Playfair Display',serif;color:var(--gold);font-size:1.4rem;text-align:center;margin-bottom:4px}
+.reserva-sub{color:var(--muted);font-size:.82rem;text-align:center;margin-bottom:20px}
+.date-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+.date-btn{padding:10px;border-radius:var(--r-sm);border:2px solid #2a2a2a;background:var(--surface2);color:var(--text);cursor:pointer;text-align:center;font-size:.82rem;font-weight:500;transition:border-color .2s}
+.date-btn.selected{border-color:var(--gold);color:var(--gold)}
+.time-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.time-btn{padding:10px;border-radius:var(--r-sm);border:2px solid #2a2a2a;background:var(--surface2);color:var(--text);cursor:pointer;font-size:.85rem;font-weight:500;transition:border-color .2s}
+.time-btn.selected{border-color:var(--gold);color:var(--gold)}
+.time-btn:disabled{opacity:.35;cursor:not-allowed}
+.confirm-box{background:var(--surface2);border-radius:var(--r-md);padding:16px;margin:16px 0}
+.confirm-row{display:flex;justify-content:space-between;padding:6px 0;font-size:.88rem}
+.confirm-row:not(:last-child){border-bottom:1px solid #2a2a2a}
+</style>
 </head>
 <body>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       SPLASH SCREEN — Visible durante la inicialización de la DB
-       ═══════════════════════════════════════════════════════════ -->
-  <div id="splash-screen" class="splash-screen" aria-label="Cargando LavaderoCF" role="status">
-    <div class="splash-content">
-      <div class="splash-logo-wrap">
-        <img src="assets/logo.jpg" alt="LavaderoCF logo" class="splash-logo" />
+<!-- SPLASH -->
+<div id="splash">
+  <img src="assets/logo.jpg" alt="LavaderoCF"/>
+  <h1>LavaderoCF</h1>
+  <p>El esplendor que tu coche merece</p>
+  <div class="splash-bar"><div class="splash-fill"></div></div>
+</div>
+
+<!-- APP SHELL -->
+<div id="app">
+
+  <!-- LOGIN -->
+  <div id="screen-login" class="screen">
+    <div class="auth-card">
+      <img src="assets/logo.jpg" class="auth-logo" alt="Logo"/>
+      <h1 class="auth-title">LavaderoCF</h1>
+      <p class="auth-slogan">El esplendor que tu coche merece</p>
+      <div class="divider"></div>
+      <div style="width:100%;display:flex;flex-direction:column;gap:6px">
+        <span class="field-label">¿Quién sos?</span>
+        <select class="field" id="empSelect">
+          <option value="">— Seleccioná tu nombre —</option>
+        </select>
       </div>
-      <h1 class="splash-brand font-serif">LavaderoCF</h1>
-      <p class="splash-slogan">El esplendor que tu coche merece</p>
-      <div class="splash-loader" aria-hidden="true">
-        <div class="splash-loader-bar"></div>
+      <div class="pin-section" id="pinSection" style="display:none">
+        <span class="field-label" style="text-align:center">PIN de acceso</span>
+        <div class="pin-dots" id="pinDots">
+          <span class="pin-dot"></span><span class="pin-dot"></span>
+          <span class="pin-dot"></span><span class="pin-dot"></span>
+        </div>
+        <div class="pin-kb">
+          <button class="pin-btn" onclick="pinDigit('1')">1</button>
+          <button class="pin-btn" onclick="pinDigit('2')">2</button>
+          <button class="pin-btn" onclick="pinDigit('3')">3</button>
+          <button class="pin-btn" onclick="pinDigit('4')">4</button>
+          <button class="pin-btn" onclick="pinDigit('5')">5</button>
+          <button class="pin-btn" onclick="pinDigit('6')">6</button>
+          <button class="pin-btn" onclick="pinDigit('7')">7</button>
+          <button class="pin-btn" onclick="pinDigit('8')">8</button>
+          <button class="pin-btn" onclick="pinDigit('9')">9</button>
+          <button class="pin-btn del" onclick="pinDel()">⌫</button>
+          <button class="pin-btn" onclick="pinDigit('0')">0</button>
+          <button class="pin-btn ok" id="pinOk" onclick="pinConfirm()" disabled>OK</button>
+        </div>
       </div>
+      <div class="divider"></div>
+      <button class="btn-link" onclick="goTo('reserva')">Ver disponibilidad y reservar turno</button>
+      <span class="auth-ver">v1.0.0</span>
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       CONTENEDOR PRINCIPAL DE LA APP
-       El router inyecta las vistas aquí
-       ═══════════════════════════════════════════════════════════ -->
-  <div id="app" class="app-shell" style="display:none;" role="main">
-    <!-- Las vistas se renderizan aquí dinámicamente -->
+  <!-- MAIN (empleado / dueño) -->
+  <div id="screen-main" class="screen">
+    <div class="top-bar">
+      <span class="top-bar-logo font-serif">LavaderoCF</span>
+      <span class="top-bar-user" id="topUser"></span>
+    </div>
+    <div class="page-content" id="pageContent">
+      <!-- views here -->
+    </div>
+    <nav class="bottom-nav" id="bottomNav"></nav>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       CONTENEDOR DE TOASTS (notificaciones flotantes)
-       ═══════════════════════════════════════════════════════════ -->
-  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+  <!-- RESERVA PÚBLICA -->
+  <div id="screen-reserva" class="screen">
+    <div class="reserva-card">
+      <img src="assets/logo.jpg" class="reserva-logo" alt="Logo"/>
+      <h2 class="reserva-title">Reservá tu turno</h2>
+      <p class="reserva-sub">LavaderoCF — El esplendor que tu coche merece</p>
+      <div id="reservaContent"></div>
+    </div>
+  </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       CONTENEDOR DE MODALES
-       ═══════════════════════════════════════════════════════════ -->
-  <div id="modal-container" class="modal-container" role="dialog" aria-modal="true"></div>
+</div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       ENTRY POINT — ES Module
-       ═══════════════════════════════════════════════════════════ -->
-  <script type="module" src="js/app.js"></script>
+<!-- MODALES -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box" id="modalBox"></div>
+</div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       SERVICE WORKER REGISTRATION
-       ═══════════════════════════════════════════════════════════ -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker
-          .register('/sw.js')
-          .then(reg => {
-            console.log('[LavaderoCF] Service Worker registrado:', reg.scope);
-            // Notificar al usuario si hay una nueva versión disponible
-            reg.addEventListener('updatefound', () => {
-              const newWorker = reg.installing;
-              newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  console.log('[LavaderoCF] Nueva versión disponible. Recargá la app.');
-                }
-              });
-            });
-          })
-          .catch(err => console.warn('[LavaderoCF] Service Worker no disponible:', err));
-      });
+<!-- TOASTS -->
+<div id="toast-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════════
+const $ = (sel, ctx=document) => ctx.querySelector(sel);
+const $$ = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
+const uuid = () => crypto.randomUUID();
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+function fmoney(n) {
+  n = Number(n)||0;
+  return '$' + n.toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:0});
+}
+function fdate(iso) {
+  if(!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-AR', {day:'numeric', month:'long', year:'numeric'});
+}
+function fdateShort(iso) {
+  if(!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'numeric'});
+}
+function fdateDay(iso) {
+  if(!iso) return '';
+  const d = new Date(typeof iso === 'string' ? iso + 'T00:00:00' : iso);
+  return d.toLocaleDateString('es-AR', {weekday:'short', day:'numeric', month:'short'});
+}
+function ftime(iso) {
+  if(!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
+}
+function daysSince(iso) {
+  if(!iso) return 9999;
+  const ms = Date.now() - new Date(iso).getTime();
+  return Math.floor(ms / 86400000);
+}
+function todayISO() {
+  return new Date().toISOString().slice(0,10);
+}
+function elapsedStr(isoStart) {
+  const ms = Date.now() - new Date(isoStart).getTime();
+  const total = Math.floor(ms/1000);
+  const h = Math.floor(total/3600);
+  const m = Math.floor((total%3600)/60);
+  const s = total%60;
+  if(h > 0) return `${h}h ${m}m`;
+  return `${m}m ${String(s).padStart(2,'0')}s`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════════════════════
+function toast(msg, tipo='info', dur=3000) {
+  const el = document.createElement('div');
+  el.className = `toast toast-${tipo}`;
+  el.textContent = msg;
+  const ct = $('#toast-container');
+  ct.appendChild(el);
+  setTimeout(() => el.style.opacity='0', dur-250);
+  setTimeout(() => el.remove(), dur);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MODAL
+// ═══════════════════════════════════════════════════════════════
+function openModal(html) {
+  $('#modalBox').innerHTML = html;
+  $('#modalOverlay').classList.add('open');
+}
+function closeModal() {
+  $('#modalOverlay').classList.remove('open');
+  $('#modalBox').innerHTML = '';
+}
+function confirmModal(msg, onYes, yesLabel='Confirmar', yesClass='btn-danger') {
+  openModal(`
+    <div class="modal-title">Confirmar acción</div>
+    <p style="color:var(--muted);margin-bottom:20px;font-size:.9rem">${msg}</p>
+    <div class="form-actions">
+      <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
+      <button class="btn ${yesClass} btn-full" id="confirmYes">${yesLabel}</button>
+    </div>
+  `);
+  $('#confirmYes').onclick = () => { closeModal(); onYes(); };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DB (IndexedDB wrapper)
+// ═══════════════════════════════════════════════════════════════
+const DB_NAME = 'lavaderocf';
+const DB_VERSION = 1;
+let _db = null;
+
+function dbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      const stores = {
+        empleados: { idx: [] },
+        servicios:  { idx: [] },
+        clientes:   { idx: ['nombre'] },
+        lavados:    { idx: ['clienteId','estado','empleadoId'] },
+        turnos:     { idx: ['fecha','estado'] },
+        costos:     { idx: ['fecha'] },
+        config:     { keyPath: 'key', idx: [] }
+      };
+      for (const [name, cfg] of Object.entries(stores)) {
+        if (!db.objectStoreNames.contains(name)) {
+          const st = db.createObjectStore(name, { keyPath: cfg.keyPath || 'id' });
+          cfg.idx.forEach(i => st.createIndex(i, i, { unique: false }));
+        }
+      }
+    };
+    req.onsuccess = e => { _db = e.target.result; resolve(_db); };
+    req.onerror = e => reject(e.target.error);
+  });
+}
+
+function tx(store, mode='readonly') {
+  if (!_db) throw new Error('DB no lista');
+  const t = _db.transaction(store, mode);
+  return t.objectStore(store);
+}
+
+function dbGet(store, key) {
+  return new Promise((res,rej) => {
+    const r = tx(store).get(key);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+function dbGetAll(store) {
+  return new Promise((res,rej) => {
+    const r = tx(store).getAll();
+    r.onsuccess = () => res(r.result||[]);
+    r.onerror = () => rej(r.error);
+  });
+}
+function dbPut(store, rec) {
+  if (!rec.id && store !== 'config') rec = {...rec, id: uuid()};
+  return new Promise((res,rej) => {
+    const t = _db.transaction(store, 'readwrite');
+    const st = t.objectStore(store);
+    st.put(rec);
+    t.oncomplete = () => res(rec);
+    t.onerror = () => rej(t.error);
+  });
+}
+function dbDelete(store, key) {
+  return new Promise((res,rej) => {
+    const t = _db.transaction(store, 'readwrite');
+    t.objectStore(store).delete(key);
+    t.oncomplete = () => res();
+    t.onerror = () => rej(t.error);
+  });
+}
+async function dbCfg(key, val) {
+  if (val === undefined) {
+    const r = await dbGet('config', key);
+    return r ? r.value : null;
+  }
+  return dbPut('config', { key, value: val });
+}
+async function dbExport() {
+  const stores = ['empleados','servicios','clientes','lavados','turnos','costos','config'];
+  const out = {};
+  for (const s of stores) out[s] = await dbGetAll(s);
+  return out;
+}
+async function dbImport(data) {
+  const stores = ['empleados','servicios','clientes','lavados','turnos','costos','config'];
+  for (const s of stores) {
+    if (!data[s]) continue;
+    await new Promise((res,rej) => {
+      const t = _db.transaction(s, 'readwrite');
+      t.objectStore(s).clear();
+      t.oncomplete = res; t.onerror = rej;
+    });
+    for (const rec of data[s]) await dbPut(s, rec);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SEEDS
+// ═══════════════════════════════════════════════════════════════
+async function seeds() {
+  const emps = await dbGetAll('empleados');
+  if (!emps.some(e => e.rol==='dueno')) {
+    await dbPut('empleados', {nombre:'Dueño', pin:'0000', rol:'dueno', tipo:'permanente', activo:true});
+  }
+  const svcs = await dbGetAll('servicios');
+  if (svcs.length === 0) {
+    const list = [
+      {nombre:'Lavado Estándar', precio:30000, descripcion:'Lavado exterior artesanal, aspirado profundo, acondicionado de plásticos interiores', comisionPct:15, activo:true},
+      {nombre:'Lavado Premium',  precio:80000, descripcion:'Lavado exterior artesanal y de llantas, aspirado profundo y detallado, acondicionado de plásticos/burletes/gomas, incluye limpieza intensiva de marcos de puertas', comisionPct:15, activo:true},
+      {nombre:'Lavado de Motor', precio:50000, descripcion:'Limpieza técnica detallada del sector motor', comisionPct:10, activo:true},
+      {nombre:'Tapizado Clásica',precio:150000,descripcion:'Limpieza profunda de tapizados in-situ (sin desarmar butacas), incluye Lavado Estándar', comisionPct:10, activo:true},
+    ];
+    for (const s of list) await dbPut('servicios', s);
+  }
+  const ver = await dbCfg('version');
+  if (!ver) {
+    await dbCfg('version', '1.0.0');
+    await dbCfg('api_key_ia', '');
+    await dbCfg('nombre_negocio', 'LavaderoCF');
+    await dbCfg('telefono_negocio', '');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AUTH / SESSION
+// ═══════════════════════════════════════════════════════════════
+const auth = {
+  set(user) { sessionStorage.setItem('lcf_user', JSON.stringify(user)); },
+  get()     { try { return JSON.parse(sessionStorage.getItem('lcf_user')); } catch(e){return null;} },
+  clear()   { sessionStorage.removeItem('lcf_user'); },
+  isDueno() { const u=this.get(); return u && u.rol==='dueno'; }
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  ROUTING (screen-based)
+// ═══════════════════════════════════════════════════════════════
+function showScreen(id) {
+  $$('.screen').forEach(s => s.classList.remove('active'));
+  const sc = $(`#screen-${id}`);
+  if (sc) sc.classList.add('active');
+}
+function showView(id) {
+  $$('.view').forEach(v => v.classList.remove('active'));
+  const v = $(`#view-${id}`);
+  if (v) v.classList.add('active');
+  $$('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view===id));
+}
+function goTo(screen, view) {
+  if (screen === 'login')   { showScreen('login'); }
+  else if (screen === 'reserva') { showScreen('reserva'); renderReserva(); }
+  else if (screen === 'main') {
+    const user = auth.get();
+    if (!user) { goTo('login'); return; }
+    showScreen('main');
+    $('#topUser').textContent = user.nombre;
+    buildNav(user);
+    if (view) showView(view);
+    else showView(auth.isDueno() ? 'dashboard' : 'registro');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  NAV
+// ═══════════════════════════════════════════════════════════════
+function buildNav(user) {
+  const pc = $('#pageContent');
+  // Build all view containers once
+  pc.innerHTML = `
+    <div class="view" id="view-dashboard"></div>
+    <div class="view" id="view-registro"></div>
+    <div class="view" id="view-dia"></div>
+    <div class="view" id="view-clientes"></div>
+    <div class="view" id="view-cierre"></div>
+    <div class="view" id="view-costos"></div>
+    <div class="view" id="view-empleados"></div>
+    <div class="view" id="view-servicios"></div>
+    <div class="view" id="view-recordatorios"></div>
+    <div class="view" id="view-ia"></div>
+    <div class="view" id="view-config"></div>
+  `;
+  const nav = $('#bottomNav');
+  const items = user.rol==='dueno'
+    ? [
+        {id:'dashboard',label:'Inicio',icon:'<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>'},
+        {id:'registro', label:'Registrar',icon:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'},
+        {id:'dia',      label:'Hoy',icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'},
+        {id:'clientes', label:'Clientes',icon:'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>'},
+        {id:'config',   label:'Más',icon:'<circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/>'},
+      ]
+    : [
+        {id:'registro', label:'Registrar',icon:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'},
+        {id:'dia',      label:'Hoy',icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'},
+        {id:'clientes', label:'Clientes',icon:'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>'},
+      ];
+  nav.innerHTML = items.map(it=>`
+    <button class="nav-item" data-view="${it.id}" onclick="navTo('${it.id}')">
+      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">${it.icon}</svg>
+      ${it.label}
+    </button>
+  `).join('');
+}
+
+async function navTo(id) {
+  showView(id);
+  await renderView(id);
+}
+
+async function renderView(id) {
+  const renders = {
+    dashboard: renderDashboard,
+    registro:  renderRegistro,
+    dia:       renderDia,
+    clientes:  renderClientes,
+    cierre:    renderCierre,
+    costos:    renderCostos,
+    empleados: renderEmpleados,
+    servicios: renderServicios,
+    recordatorios: renderRecordatorios,
+    ia:        renderIA,
+    config:    renderConfig,
+  };
+  if (renders[id]) await renders[id]();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LOGIN
+// ═══════════════════════════════════════════════════════════════
+let pinVal = '', pinUser = null;
+async function initLogin() {
+  pinVal=''; pinUser=null;
+  const sel = $('#empSelect');
+  sel.innerHTML = '<option value="">— Seleccioná tu nombre —</option>';
+  const emps = await dbGetAll('empleados');
+  emps.filter(e=>e.activo).forEach(e => {
+    sel.innerHTML += `<option value="${e.id}">${e.nombre}${e.rol==='dueno'?' 👑':''}</option>`;
+  });
+  sel.onchange = async () => {
+    const id = sel.value;
+    if (!id) { $('#pinSection').style.display='none'; pinUser=null; resetPin(); return; }
+    const all = await dbGetAll('empleados');
+    pinUser = all.find(e=>e.id===id)||null;
+    if (pinUser) { $('#pinSection').style.display='flex'; resetPin(); }
+  };
+  const ver = await dbCfg('version');
+  if (ver) $('.auth-ver').textContent = `v${ver}`;
+}
+function pinDigit(d) {
+  if (pinVal.length>=4) return;
+  pinVal += d;
+  updatePinDots();
+  if (pinVal.length===4) setTimeout(pinConfirm, 120);
+}
+function pinDel()   { pinVal=pinVal.slice(0,-1); updatePinDots(); }
+function updatePinDots() {
+  $$('.pin-dot').forEach((dot,i) => dot.classList.toggle('on', i<pinVal.length));
+  const ok = $('#pinOk'); if(ok) ok.disabled = pinVal.length<4;
+}
+function resetPin()  { pinVal=''; updatePinDots(); }
+async function pinConfirm() {
+  if (!pinUser || pinVal.length!==4) return;
+  if (pinVal===pinUser.pin) {
+    auth.set(pinUser);
+    toast('¡Bienvenido, '+pinUser.nombre+'!','success');
+    await delay(350);
+    goTo('main');
+    await renderView(auth.isDueno()?'dashboard':'registro');
+  } else {
+    $$('.pin-dot').forEach(d=>d.classList.add('err'));
+    toast('PIN incorrecto','error');
+    await delay(500);
+    $$('.pin-dot').forEach(d=>d.classList.remove('err'));
+    resetPin();
+  }
+}
+document.addEventListener('keydown', e => {
+  if ($('#screen-login').classList.contains('active') && $('#pinSection').style.display!=='none') {
+    if (e.key>='0'&&e.key<='9'&&pinVal.length<4) { pinDigit(e.key); }
+    else if (e.key==='Backspace') { pinDel(); }
+    else if (e.key==='Enter'&&pinVal.length===4) { pinConfirm(); }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: DASHBOARD
+// ═══════════════════════════════════════════════════════════════
+async function renderDashboard() {
+  const el = $('#view-dashboard');
+  const today = todayISO();
+  const [lavados, clientes, costos] = await Promise.all([
+    dbGetAll('lavados'), dbGetAll('clientes'), dbGetAll('costos')
+  ]);
+  const hoy = lavados.filter(l => l.fechaInicio && l.fechaInicio.startsWith(today) && l.estado==='listo');
+  const ingHoy = hoy.reduce((s,l)=>s+(l.precio||0), 0);
+  const comHoy = hoy.reduce((s,l)=>s+(l.comisionMonto||0), 0);
+  const pendRecords = clientes.filter(c => {
+    const ls = lavados.filter(l=>l.clienteId===c.id).sort((a,b)=>b.fechaInicio?.localeCompare(a.fechaInicio));
+    return ls.length>0 && daysSince(ls[0].fechaInicio)>=30;
+  });
+  el.innerHTML = `
+    <p class="view-title">Panel de Control</p>
+    <p class="view-sub">${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</p>
+    ${pendRecords.length>0?`<div class="card card-gold flex-between mb-md" onclick="navTo('recordatorios')" style="cursor:pointer">
+      <div><p class="fw-bold text-gold">🔔 Recordatorios</p><p class="text-muted" style="font-size:.82rem">${pendRecords.length} cliente${pendRecords.length!==1?'s':''} sin lavar hace 30+ días</p></div>
+      <span class="badge-count">${pendRecords.length}</span>
+    </div>`:''}
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Ingresos hoy</div><div class="stat-val">${fmoney(ingHoy)}</div></div>
+      <div class="stat-card"><div class="stat-label">Lavados hoy</div><div class="stat-val">${hoy.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Comisiones hoy</div><div class="stat-val">${fmoney(comHoy)}</div></div>
+      <div class="stat-card"><div class="stat-label">Ganancia neta</div><div class="stat-val">${fmoney(ingHoy-comHoy)}</div></div>
+    </div>
+    <div class="section-head">Accesos rápidos</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <button class="btn btn-secondary btn-full" onclick="navTo('cierre')">💰 Cierre de caja</button>
+      <button class="btn btn-secondary btn-full" onclick="navTo('costos')">📋 Cargar costo</button>
+      <button class="btn btn-secondary btn-full" onclick="navTo('empleados')">👥 Empleados</button>
+      <button class="btn btn-secondary btn-full" onclick="navTo('servicios')">✏️ Servicios</button>
+      <button class="btn btn-secondary btn-full" onclick="navTo('ia')">🤖 Recomendaciones IA</button>
+      <button class="btn btn-secondary btn-full" onclick="navTo('recordatorios')">🔔 Recordatorios</button>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: REGISTRO RÁPIDO
+// ═══════════════════════════════════════════════════════════════
+let regCliente=null, regServicio=null, regVehiculo='auto', regEmpleado=null;
+async function renderRegistro() {
+  const el = $('#view-registro');
+  const [servicios, empleados] = await Promise.all([dbGetAll('servicios'), dbGetAll('empleados')]);
+  const user = auth.get();
+  el.innerHTML = `
+    <p class="view-title">Registro Rápido</p>
+    <p class="view-sub">Buscá el cliente o creá uno nuevo</p>
+    <!-- CLIENTE -->
+    <div class="section-head">1 · Cliente</div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="regSearch" placeholder="Nombre, teléfono o patente..." oninput="regBuscar(this.value)"/>
+    </div>
+    <div id="regSuggs" class="suggestions"></div>
+    <div id="regClienteInfo" style="display:none" class="card card-gold mt-sm">
+      <p class="fw-bold text-gold" id="regClienteNombre"></p>
+      <p class="text-muted" style="font-size:.82rem" id="regClienteDetalle"></p>
+      <button class="btn btn-sm btn-secondary mt-sm" onclick="regLimpiarCliente()">Cambiar cliente</button>
+    </div>
+    <div id="regNuevoCliente" style="display:none">
+      <div class="input-group"><label class="input-label">Nombre *</label><input class="input" id="regNombre" placeholder="Juan Pérez"/></div>
+      <div class="input-group"><label class="input-label">Teléfono *</label><input class="input" id="regTel" type="tel" placeholder="2487123456"/></div>
+      <div class="input-group"><label class="input-label">Patente</label><input class="input" id="regPatente" placeholder="AB123CD"/></div>
+    </div>
+    <!-- TIPO DE VEHÍCULO -->
+    <div class="section-head">2 · Tipo de vehículo</div>
+    <div class="vehicle-grid">
+      <button class="vehicle-btn selected" id="vt-auto" onclick="selVehiculo('auto')"><span class="icon">🚗</span>Auto<br><span style="font-size:.7rem;color:var(--muted)">60 min</span></button>
+      <button class="vehicle-btn" id="vt-camioneta" onclick="selVehiculo('camioneta')"><span class="icon">🚐</span>Camioneta<br><span style="font-size:.7rem;color:var(--muted)">90 min</span></button>
+      <button class="vehicle-btn" id="vt-4x4" onclick="selVehiculo('4x4')"><span class="icon">🚙</span>4x4<br><span style="font-size:.7rem;color:var(--muted)">120 min</span></button>
+    </div>
+    <!-- SERVICIO -->
+    <div class="section-head">3 · Servicio</div>
+    <div class="services-grid" id="regServicios">
+      ${servicios.filter(s=>s.activo).map(s=>`
+        <div class="service-card" id="sc-${s.id}" onclick="selServicio('${s.id}')">
+          <div class="service-name">${s.nombre}</div>
+          <div class="service-price">${fmoney(s.precio)}</div>
+          <div class="service-desc">${s.descripcion||''}</div>
+        </div>`).join('')}
+    </div>
+    <!-- EMPLEADO (solo dueño) -->
+    ${user.rol==='dueno'?`
+    <div class="section-head">4 · Empleado asignado</div>
+    <div class="input-group"><select class="input" id="regEmpId">
+      <option value="">— Seleccionar —</option>
+      ${empleados.filter(e=>e.activo).map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('')}
+    </select></div>`:''}
+    <!-- NOTAS -->
+    <div class="section-head">${user.rol==='dueno'?'5':'4'} · Notas (opcional)</div>
+    <div class="input-group"><textarea class="input" id="regNotas" rows="2" maxlength="200" placeholder="Observaciones..."></textarea></div>
+    <button class="btn btn-primary btn-full" id="regConfirmar" onclick="regConfirmar()">🚗 Agregar a la cola de hoy</button>
+  `;
+  regCliente=null; regServicio=null; regVehiculo='auto';
+  regEmpleado = user.rol==='dueno' ? null : user;
+}
+
+let regSearchTimer;
+async function regBuscar(q) {
+  clearTimeout(regSearchTimer);
+  const suggs = $('#regSuggs');
+  if (q.trim().length < 2) { suggs.style.display='none'; return; }
+  regSearchTimer = setTimeout(async () => {
+    const todos = await dbGetAll('clientes');
+    const ql = q.toLowerCase();
+    const found = todos.filter(c =>
+      c.nombre?.toLowerCase().includes(ql) ||
+      c.telefono?.includes(ql) ||
+      (c.patentes||[]).some(p=>p.toLowerCase().includes(ql))
+    ).slice(0,5);
+    if (found.length===0) {
+      suggs.innerHTML = `<div class="suggestion-item" onclick="regNuevoClienteForm()">➕ Registrar "${q}" como nuevo cliente</div>`;
+    } else {
+      suggs.innerHTML = found.map(c=>`
+        <div class="suggestion-item" onclick="regSelCliente('${c.id}')">
+          <strong>${c.nombre}</strong> · ${c.telefono} · ${(c.patentes||[]).join(', ')}
+        </div>`).join('');
+      suggs.innerHTML += `<div class="suggestion-item text-muted" onclick="regNuevoClienteForm()" style="font-size:.8rem">➕ Crear nuevo cliente</div>`;
     }
-  </script>
+    suggs.style.display='block';
+  }, 300);
+}
+async function regSelCliente(id) {
+  const todos = await dbGetAll('clientes');
+  regCliente = todos.find(c=>c.id===id);
+  if (!regCliente) return;
+  $('#regSuggs').style.display='none';
+  $('#regSearch').value='';
+  $('#regNuevoCliente').style.display='none';
+  const ci = $('#regClienteInfo');
+  ci.style.display='block';
+  $('#regClienteNombre').textContent = regCliente.nombre + ' ✔ Cliente existente';
+  $('#regClienteDetalle').textContent = `Tel: ${regCliente.telefono} · Patentes: ${(regCliente.patentes||[]).join(', ')||'—'}`;
+}
+function regNuevoClienteForm() {
+  $('#regSuggs').style.display='none';
+  const q = $('#regSearch').value.trim();
+  $('#regNuevoCliente').style.display='block';
+  if (/^\d+$/.test(q)) $('#regTel').value=q;
+  else if (q) $('#regNombre').value=q;
+  regCliente=null;
+}
+function regLimpiarCliente() {
+  regCliente=null;
+  $('#regClienteInfo').style.display='none';
+  $('#regNuevoCliente').style.display='none';
+  $('#regSearch').value='';
+}
+function selVehiculo(tipo) {
+  regVehiculo=tipo;
+  ['auto','camioneta','4x4'].forEach(t=>{
+    const b=$(`#vt-${t}`); if(b) b.classList.toggle('selected',t===tipo);
+  });
+}
+function selServicio(id) {
+  regServicio=id;
+  $$('.service-card').forEach(c=>c.classList.toggle('selected',c.id===`sc-${id}`));
+}
+async function regConfirmar() {
+  const user = auth.get();
+  // Validar cliente
+  let cliente = regCliente;
+  if (!cliente) {
+    const nombre = $('#regNombre')?.value.trim();
+    const tel    = $('#regTel')?.value.trim();
+    const pat    = $('#regPatente')?.value.trim();
+    if (!nombre || !tel) { toast('Completá nombre y teléfono del cliente','error'); return; }
+    // Verificar duplicado
+    const todos = await dbGetAll('clientes');
+    const existe = todos.find(c=>c.telefono===tel||(pat&&(c.patentes||[]).includes(pat)));
+    if (existe) { await regSelCliente(existe.id); toast('Cliente existente detectado — usamos su ficha','info'); return; }
+    cliente = await dbPut('clientes', {nombre, telefono:tel, patentes:pat?[pat]:[], email:'', creadoEn:new Date().toISOString()});
+  }
+  if (!regServicio) { toast('Seleccioná un servicio','error'); return; }
+  const empId = user.rol==='dueno' ? ($('#regEmpId')?.value||user.id) : user.id;
+  if (!empId) { toast('Seleccioná un empleado','error'); return; }
+  const svcs = await dbGetAll('servicios');
+  const svc = svcs.find(s=>s.id===regServicio);
+  const comMonto = Math.round((svc.precio*(svc.comisionPct||0))/100);
+  await dbPut('lavados', {
+    clienteId:cliente.id, clienteNombre:cliente.nombre, clienteTelefono:cliente.telefono,
+    patente:(cliente.patentes||[])[0]||'—', tipoVehiculo:regVehiculo,
+    servicioId:regServicio, servicioNombre:svc.nombre,
+    empleadoId:empId, estado:'en_espera',
+    fechaInicio:new Date().toISOString(), fechaFin:null,
+    precio:svc.precio, comisionPct:svc.comisionPct||0, comisionMonto:comMonto,
+    notas:$('#regNotas')?.value||'', origen:'mostrador'
+  });
+  toast('¡Vehículo agregado a la cola! 🚗','success');
+  await renderRegistro();
+}
 
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: VEHÍCULOS DEL DÍA
+// ═══════════════════════════════════════════════════════════════
+let diaTimer=null;
+async function renderDia() {
+  if (diaTimer) { clearInterval(diaTimer); diaTimer=null; }
+  const el = $('#view-dia');
+  const today = todayISO();
+  const [lavados, clientes] = await Promise.all([dbGetAll('lavados'), dbGetAll('clientes')]);
+  const hoy = lavados.filter(l=>l.fechaInicio?.startsWith(today)).sort((a,b)=>a.fechaInicio?.localeCompare(b.fechaInicio));
+  const user = auth.get();
+
+  function estadoHtml(l) {
+    if(l.estado==='en_espera') return `<span class="chip chip-wait">En espera</span>`;
+    if(l.estado==='en_proceso') return `<span class="chip chip-proc">⚙️ En proceso</span>`;
+    return `<span class="chip chip-done">✔ Listo</span>`;
+  }
+  function accionBtn(l) {
+    if(l.estado==='en_espera') return `<button class="btn btn-primary btn-sm" onclick="diaIniciar('${l.id}')">▶ Iniciar</button>`;
+    if(l.estado==='en_proceso') return `<button class="btn btn-primary btn-sm" onclick="diaTerminar('${l.id}')">✔ Listo</button>`;
+    return `<button class="btn btn-wa btn-sm" onclick="diaWhatsapp('${l.id}')">💬 Avisar</button>`;
+  }
+  function vehicIcon(tipo) {
+    if(tipo==='camioneta') return '🚐';
+    if(tipo==='4x4') return '🚙';
+    return '🚗';
+  }
+
+  el.innerHTML = `
+    <p class="view-title">Vehículos del Día</p>
+    <p class="view-sub">${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</p>
+    <div class="flex-gap mb-md" style="flex-wrap:wrap">
+      <span class="chip chip-wait">En espera: ${hoy.filter(l=>l.estado==='en_espera').length}</span>
+      <span class="chip chip-proc">En proceso: ${hoy.filter(l=>l.estado==='en_proceso').length}</span>
+      <span class="chip chip-done">Listos: ${hoy.filter(l=>l.estado==='listo').length}</span>
+    </div>
+    ${hoy.length===0?`<div class="empty"><span class="empty-icon">🚗</span><p>Ningún vehículo registrado hoy.</p><button class="btn btn-primary mt-sm" onclick="navTo('registro')">Registrar primer vehículo</button></div>`:''}
+    <div id="diaList">
+    ${hoy.map(l=>`
+      <div class="card" id="dcard-${l.id}">
+        <div class="flex-between mb-sm">
+          <div>
+            <p class="fw-bold">${vehicIcon(l.tipoVehiculo)} ${l.clienteNombre||'—'}</p>
+            <p style="font-size:1.1rem;font-family:monospace;color:var(--gold);letter-spacing:.1em">${l.patente||''}</p>
+          </div>
+          ${estadoHtml(l)}
+        </div>
+        <p class="text-muted" style="font-size:.82rem">${l.servicioNombre||'—'} · ${fmoney(l.precio)}</p>
+        <p class="text-muted" style="font-size:.78rem">Empleado: ${l.empleadoId||'—'}</p>
+        <div class="flex-between mt-sm">
+          <span class="timer" id="timer-${l.id}">${l.estado==='en_proceso'?elapsedStr(l.fechaInicio):l.estado==='listo'?ftime(l.fechaFin)||'—':''}</span>
+          <div class="flex-gap">
+            ${user.rol==='dueno'&&l.estado!=='listo'?`<button class="btn btn-danger btn-sm" onclick="diaEliminar('${l.id}')">Eliminar</button>`:''}
+            ${accionBtn(l)}
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>
+  `;
+  // Timer live
+  if (hoy.some(l=>l.estado==='en_proceso')) {
+    diaTimer = setInterval(() => {
+      hoy.filter(l=>l.estado==='en_proceso').forEach(l=>{
+        const t = $(`#timer-${l.id}`);
+        if(t) t.textContent = elapsedStr(l.fechaInicio);
+      });
+    }, 1000);
+  }
+}
+async function diaIniciar(id) {
+  const all = await dbGetAll('lavados');
+  const l = all.find(x=>x.id===id);
+  if (!l) return;
+  await dbPut('lavados', {...l, estado:'en_proceso'});
+  toast('¡Iniciado!','success');
+  await renderDia();
+}
+async function diaTerminar(id) {
+  const all = await dbGetAll('lavados');
+  const l = all.find(x=>x.id===id);
+  if (!l) return;
+  await dbPut('lavados', {...l, estado:'listo', fechaFin:new Date().toISOString()});
+  openModal(`
+    <div class="modal-title text-gold">✅ ¡Vehículo listo!</div>
+    <p style="color:var(--muted);margin-bottom:16px;font-size:.9rem">Avisale al cliente por WhatsApp:</p>
+    <div class="card" style="font-size:.88rem;line-height:1.6;margin-bottom:16px">
+      ¡Hola ${l.clienteNombre}! Tu vehículo ya está listo para retirar en LavaderoCF. ¡Te esperamos! 🚗✨
+    </div>
+    <button class="btn btn-wa btn-full" onclick="diaOpenWA('${l.id}')">💬 Abrir WhatsApp</button>
+    <button class="btn btn-secondary btn-full mt-sm" onclick="closeModal()">Ya avisamos</button>
+  `);
+  await renderDia();
+}
+async function diaOpenWA(id) {
+  const all = await dbGetAll('lavados');
+  const l = all.find(x=>x.id===id);
+  if (!l||!l.clienteTelefono) { toast('Sin teléfono del cliente','error'); return; }
+  const tel = '549'+l.clienteTelefono.replace(/\D/g,'');
+  const msg = encodeURIComponent(`¡Hola ${l.clienteNombre}! Tu vehículo ya está listo para retirar en LavaderoCF. ¡Te esperamos! 🚗✨`);
+  window.open(`https://wa.me/${tel}?text=${msg}`, '_blank');
+}
+async function diaEliminar(id) {
+  confirmModal('¿Eliminar este vehículo de la cola?', async ()=>{
+    await dbDelete('lavados', id);
+    toast('Eliminado','info');
+    await renderDia();
+  });
+}
+function diaWhatsapp(id) { diaOpenWA(id); }
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: CLIENTES
+// ═══════════════════════════════════════════════════════════════
+async function renderClientes() {
+  const el = $('#view-clientes');
+  const [todos, lavados] = await Promise.all([dbGetAll('clientes'), dbGetAll('lavados')]);
+  el.innerHTML = `
+    <p class="view-title">Clientes</p>
+    <div class="flex-between mb-md">
+      <p class="text-muted" style="font-size:.82rem">${todos.length} cliente${todos.length!==1?'s':''}</p>
+      <div class="flex-gap">
+        <button class="btn btn-sm btn-secondary" onclick="importarCSV()">📥 Importar CSV</button>
+        <button class="btn btn-sm btn-primary" onclick="nuevoClienteModal()">+ Nuevo</button>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" placeholder="Buscar por nombre, teléfono o patente..." oninput="filtrarClientes(this.value)"/>
+    </div>
+    <div id="clientesList">
+      ${renderClientesLista(todos, lavados)}
+    </div>
+  `;
+}
+function renderClientesLista(clientes, lavados) {
+  if (!clientes.length) return `<div class="empty"><span class="empty-icon">👤</span><p>Aún no hay clientes registrados.</p></div>`;
+  return clientes.map(c=>{
+    const lc = lavados.filter(l=>l.clienteId===c.id).sort((a,b)=>b.fechaInicio?.localeCompare(a.fechaInicio));
+    const ultimo = lc[0];
+    const dias = ultimo ? daysSince(ultimo.fechaInicio) : null;
+    const warn = dias!==null && dias>=30;
+    return `<div class="list-row" onclick="verCliente('${c.id}')">
+      <div class="list-row-left">
+        <span class="row-title">${c.nombre} ${warn?'<span class="badge-count" style="background:var(--warn)">'+dias+'d</span>':''}</span>
+        <span class="row-sub">📞 ${c.telefono} · 🚗 ${(c.patentes||[]).join(', ')||'sin patente'}</span>
+        <span class="row-sub">${lc.length} lavado${lc.length!==1?'s':''} · ${ultimo?'Último: '+fdateShort(ultimo.fechaInicio):'Sin historial'}</span>
+      </div>
+      <span style="color:var(--muted);font-size:1.2rem">›</span>
+    </div>`;
+  }).join('');
+}
+async function filtrarClientes(q) {
+  const [todos, lavados] = await Promise.all([dbGetAll('clientes'), dbGetAll('lavados')]);
+  const ql = q.toLowerCase().trim();
+  const filtrados = ql.length<1 ? todos : todos.filter(c=>
+    c.nombre?.toLowerCase().includes(ql)||
+    c.telefono?.includes(ql)||
+    (c.patentes||[]).some(p=>p.toLowerCase().includes(ql))
+  );
+  $('#clientesList').innerHTML = renderClientesLista(filtrados, lavados);
+}
+async function verCliente(id) {
+  const [todos, lavados, svcs, emps] = await Promise.all([dbGetAll('clientes'),dbGetAll('lavados'),dbGetAll('servicios'),dbGetAll('empleados')]);
+  const c = todos.find(x=>x.id===id); if(!c) return;
+  const lc = lavados.filter(l=>l.clienteId===id).sort((a,b)=>b.fechaInicio?.localeCompare(a.fechaInicio));
+  openModal(`
+    <div class="modal-title">👤 ${c.nombre}</div>
+    <div class="card" style="margin-bottom:12px">
+      <p><strong>Teléfono:</strong> ${c.telefono}</p>
+      <p><strong>Patentes:</strong> ${(c.patentes||[]).join(', ')||'—'}</p>
+      <p><strong>Alta:</strong> ${fdateShort(c.creadoEn)||'—'}</p>
+      <p><strong>Total lavados:</strong> ${lc.length}</p>
+    </div>
+    <div class="section-head">Historial</div>
+    ${lc.length===0?'<p class="text-muted" style="font-size:.85rem">Sin historial</p>':lc.map(l=>`
+      <div class="list-row" style="margin-bottom:6px">
+        <div class="list-row-left">
+          <span class="row-title">${l.servicioNombre||'—'}</span>
+          <span class="row-sub">${fdateShort(l.fechaInicio)} · ${fmoney(l.precio)}</span>
+        </div>
+        ${l.estado==='listo'?'<span class="chip chip-done">✔</span>':''}
+      </div>`).join('')}
+    <div class="form-actions">
+      <button class="btn btn-secondary btn-full" onclick="closeModal()">Cerrar</button>
+      <button class="btn btn-wa btn-full" onclick="clienteWA('${id}')">💬 WhatsApp</button>
+    </div>
+  `);
+}
+async function clienteWA(id) {
+  const todos = await dbGetAll('clientes');
+  const c = todos.find(x=>x.id===id); if(!c) return;
+  const tel='549'+c.telefono.replace(/\D/g,'');
+  const msg=encodeURIComponent(`¡Hola ${c.nombre}! Ya pasaron 30 días desde tu último lavado en LavaderoCF. ¿Querés agendar un nuevo turno de mantenimiento? Respondé este mensaje y coordinamos. ✨`);
+  window.open(`https://wa.me/${tel}?text=${msg}`,'_blank');
+}
+function nuevoClienteModal() {
+  openModal(`
+    <div class="modal-title">+ Nuevo Cliente</div>
+    <div class="input-group"><label class="input-label">Nombre *</label><input class="input" id="ncNombre" placeholder="Juan Pérez"/></div>
+    <div class="input-group"><label class="input-label">Teléfono *</label><input class="input" id="ncTel" type="tel" placeholder="2487123456"/></div>
+    <div class="input-group"><label class="input-label">Patente</label><input class="input" id="ncPatente" placeholder="AB123CD"/></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary btn-full" onclick="guardarNuevoCliente()">Guardar</button>
+    </div>
+  `);
+}
+async function guardarNuevoCliente() {
+  const nombre=$('#ncNombre').value.trim();
+  const tel=$('#ncTel').value.trim();
+  const pat=$('#ncPatente').value.trim();
+  if(!nombre||!tel){toast('Completá nombre y teléfono','error');return;}
+  const todos=await dbGetAll('clientes');
+  if(todos.some(c=>c.telefono===tel)){toast('Ya existe un cliente con ese teléfono','error');return;}
+  await dbPut('clientes',{nombre,telefono:tel,patentes:pat?[pat]:[],email:'',creadoEn:new Date().toISOString()});
+  closeModal(); toast('Cliente creado ✔','success'); await renderClientes();
+}
+function importarCSV() {
+  openModal(`
+    <div class="modal-title">📥 Importar Clientes desde CSV</div>
+    <p class="text-muted" style="font-size:.82rem;margin-bottom:12px">El archivo debe tener columnas: nombre, telefono, patente (separado por comas o punto y coma)</p>
+    <input type="file" accept=".csv" class="input" id="csvFile" style="padding:10px"/>
+    <div class="form-actions mt-md">
+      <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary btn-full" onclick="procesarCSV()">Importar</button>
+    </div>
+  `);
+}
+async function procesarCSV() {
+  const file=$('#csvFile')?.files[0]; if(!file){toast('Seleccioná un archivo','error');return;}
+  const text=await file.text();
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  const header=lines[0].toLowerCase();
+  const sep=header.includes(';')?';':',';
+  const cols=header.split(sep).map(c=>c.trim());
+  const ni=cols.findIndex(c=>c.includes('nombre'));
+  const ti=cols.findIndex(c=>c.includes('tel'));
+  const pi=cols.findIndex(c=>c.includes('pat'));
+  if(ni<0||ti<0){toast('El archivo debe tener columnas nombre y telefono','error');return;}
+  const existentes=await dbGetAll('clientes');
+  let ok=0,dup=0;
+  for(let i=1;i<lines.length;i++){
+    const p=lines[i].split(sep).map(c=>c.trim().replace(/^"|"$/g,''));
+    const nombre=p[ni]||''; const tel=p[ti]||''; const pat=pi>=0?p[pi]||'':'';
+    if(!nombre||!tel){continue;}
+    if(existentes.some(c=>c.telefono===tel)){dup++;continue;}
+    await dbPut('clientes',{nombre,telefono:tel,patentes:pat?[pat]:[],email:'',creadoEn:new Date().toISOString()});
+    ok++;
+  }
+  closeModal(); toast(`${ok} importados, ${dup} duplicados omitidos`,'success'); await renderClientes();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: CIERRE DE CAJA
+// ═══════════════════════════════════════════════════════════════
+async function renderCierre() {
+  const el=$('#view-cierre');
+  const hoy=todayISO();
+  el.innerHTML=`
+    <p class="view-title">Cierre de Caja</p>
+    <div class="input-group"><label class="input-label">Fecha</label><input class="input" type="date" id="cierreDate" value="${hoy}" onchange="loadCierre(this.value)"/></div>
+    <div id="cierreContent"></div>
+  `;
+  await loadCierre(hoy);
+}
+async function loadCierre(fecha) {
+  const [lavados, empleados, costos] = await Promise.all([dbGetAll('lavados'),dbGetAll('empleados'),dbGetAll('costos')]);
+  const del = lavados.filter(l=>l.fechaInicio?.startsWith(fecha)&&l.estado==='listo');
+  const costosDia = costos.filter(c=>c.fecha===fecha);
+  const totalCostos = costosDia.reduce((s,c)=>s+(c.monto||0),0);
+  const bruto = del.reduce((s,l)=>s+(l.precio||0),0);
+  const comis = del.reduce((s,l)=>s+(l.comisionMonto||0),0);
+  const neto  = bruto - comis - totalCostos;
+  const byEmp = {};
+  del.forEach(l=>{
+    if(!byEmp[l.empleadoId]) byEmp[l.empleadoId]={nombre:'—',total:0,cant:0};
+    const emp=empleados.find(e=>e.id===l.empleadoId);
+    byEmp[l.empleadoId].nombre=emp?.nombre||l.empleadoId||'—';
+    byEmp[l.empleadoId].total+=(l.comisionMonto||0);
+    byEmp[l.empleadoId].cant++;
+  });
+  const ct=$('#cierreContent');
+  if(!ct) return;
+  ct.innerHTML=`
+    ${del.length===0?`<div class="empty"><span class="empty-icon">💰</span><p>No hay lavados finalizados para esta fecha.</p></div>`:`
+    <div class="card card-gold" style="margin-bottom:16px">
+      <div class="confirm-row"><span>Ingreso bruto</span><strong>${fmoney(bruto)}</strong></div>
+      <div class="confirm-row"><span>Comisiones</span><span class="text-danger">-${fmoney(comis)}</span></div>
+      <div class="confirm-row"><span>Costos del día</span><span class="text-danger">-${fmoney(totalCostos)}</span></div>
+      <div class="confirm-row"><span class="fw-bold text-gold font-serif">Ganancia neta</span><strong class="text-gold" style="font-size:1.1rem">${fmoney(neto)}</strong></div>
+    </div>
+    <div class="section-head">Comisiones por empleado</div>
+    ${Object.values(byEmp).map(e=>`<div class="list-row"><div class="list-row-left"><span class="row-title">${e.nombre}</span><span class="row-sub">${e.cant} lavado${e.cant!==1?'s':''}</span></div><strong>${fmoney(e.total)}</strong></div>`).join('')}
+    <div class="section-head">Detalle de lavados</div>
+    ${del.map(l=>`<div class="list-row"><div class="list-row-left"><span class="row-title">${l.clienteNombre||'—'} · ${l.servicioNombre||'—'}</span><span class="row-sub">Comisión: ${fmoney(l.comisionMonto||0)}</span></div><strong>${fmoney(l.precio)}</strong></div>`).join('')}
+    <button class="btn btn-secondary btn-full mt-md" onclick="exportCierre()">📥 Exportar CSV</button>
+    `}
+  `;
+}
+async function exportCierre() {
+  const fecha=$('#cierreDate').value||todayISO();
+  const lavados=await dbGetAll('lavados');
+  const del=lavados.filter(l=>l.fechaInicio?.startsWith(fecha)&&l.estado==='listo');
+  const rows=[['Cliente','Patente','Servicio','Empleado','Precio','Comision','Fecha']];
+  del.forEach(l=>rows.push([l.clienteNombre||'',l.patente||'',l.servicioNombre||'',l.empleadoId||'',l.precio||0,l.comisionMonto||0,l.fechaInicio?.slice(0,10)||'']));
+  const csv=rows.map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download=`cierre-${fecha}.csv`; a.click();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: COSTOS
+// ═══════════════════════════════════════════════════════════════
+async function renderCostos() {
+  const el=$('#view-costos');
+  const costos=await dbGetAll('costos');
+  el.innerHTML=`
+    <div class="flex-between mb-md"><p class="view-title">Costos</p><button class="btn btn-primary btn-sm" onclick="nuevoCostoModal()">+ Agregar</button></div>
+    <div class="section-head">Últimos 30 días</div>
+    ${costos.length===0?`<div class="empty"><span class="empty-icon">📋</span><p>Sin costos cargados aún.</p></div>`:costos.sort((a,b)=>b.fecha?.localeCompare(a.fecha)).map(c=>`
+      <div class="list-row">
+        <div class="list-row-left">
+          <span class="row-title">${c.descripcion}</span>
+          <span class="row-sub">${fdateShort(c.fecha+'T00:00:00')} · ${c.tipo}</span>
+        </div>
+        <div class="flex-gap">
+          <strong>${fmoney(c.monto)}</strong>
+          <button class="btn btn-danger btn-sm" onclick="borrarCosto('${c.id}')">✕</button>
+        </div>
+      </div>`).join('')}
+  `;
+}
+function nuevoCostoModal() {
+  openModal(`
+    <div class="modal-title">+ Nuevo Costo</div>
+    <div class="input-group"><label class="input-label">Descripción *</label><input class="input" id="cDesc" placeholder="Champú auto, etc."/></div>
+    <div class="input-group"><label class="input-label">Monto *</label><input class="input" id="cMonto" type="number" placeholder="5000"/></div>
+    <div class="input-group"><label class="input-label">Tipo</label><select class="input" id="cTipo"><option value="insumo">Insumo</option><option value="sueldo">Sueldo</option><option value="servicio">Servicio</option><option value="mantenimiento">Mantenimiento</option></select></div>
+    <div class="input-group"><label class="input-label">Fecha</label><input class="input" type="date" id="cFecha" value="${todayISO()}"/></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary btn-full" onclick="guardarCosto()">Guardar</button>
+    </div>
+  `);
+}
+async function guardarCosto() {
+  const desc=$('#cDesc').value.trim();
+  const monto=Number($('#cMonto').value);
+  if(!desc||!monto){toast('Completá los campos requeridos','error');return;}
+  await dbPut('costos',{descripcion:desc,monto,tipo:$('#cTipo').value,fecha:$('#cFecha').value,recurrente:false});
+  closeModal(); toast('Costo guardado ✔','success'); await renderCostos();
+}
+async function borrarCosto(id) {
+  confirmModal('¿Eliminar este costo?',async()=>{await dbDelete('costos',id);toast('Eliminado','info');await renderCostos();});
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: EMPLEADOS
+// ═══════════════════════════════════════════════════════════════
+async function renderEmpleados() {
+  const el=$('#view-empleados');
+  const [emps, lavados]=await Promise.all([dbGetAll('empleados'),dbGetAll('lavados')]);
+  el.innerHTML=`
+    <div class="flex-between mb-md"><p class="view-title">Empleados</p><button class="btn btn-primary btn-sm" onclick="nuevoEmpleadoModal()">+ Agregar</button></div>
+    ${emps.map(e=>{
+      const lc=lavados.filter(l=>l.empleadoId===e.id&&l.estado==='listo');
+      return `<div class="card ${!e.activo?'':''}">
+        <div class="flex-between">
+          <div>
+            <p class="fw-bold">${e.nombre} ${e.rol==='dueno'?'👑':''}</p>
+            <p class="text-muted" style="font-size:.78rem">${e.tipo} · ${lc.length} lavados · ${fmoney(lc.reduce((s,l)=>s+(l.comisionMonto||0),0))}</p>
+          </div>
+          <span class="chip ${e.activo?'chip-done':'chip-wait'}">${e.activo?'Activo':'Inactivo'}</span>
+        </div>
+        ${e.rol!=='dueno'?`<div class="flex-gap mt-sm">
+          <button class="btn btn-sm btn-secondary" onclick="editarPinModal('${e.id}')">Cambiar PIN</button>
+          <button class="btn btn-sm ${e.activo?'btn-danger':'btn-secondary'}" onclick="${e.activo?`desactivarEmp('${e.id}')`:`activarEmp('${e.id}')`}">${e.activo?'Desactivar':'Reactivar'}</button>
+        </div>`:''}
+      </div>`;}).join('')}
+  `;
+}
+function nuevoEmpleadoModal() {
+  openModal(`
+    <div class="modal-title">+ Nuevo Empleado</div>
+    <div class="input-group"><label class="input-label">Nombre *</label><input class="input" id="enNombre" placeholder="Carlos"/></div>
+    <div class="input-group"><label class="input-label">Tipo</label><select class="input" id="enTipo"><option value="permanente">Permanente</option><option value="temporal">Temporal</option></select></div>
+    <div class="input-group"><label class="input-label">PIN (4 dígitos) *</label><input class="input" id="enPin" type="tel" maxlength="4" placeholder="1234"/></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary btn-full" onclick="guardarEmpleado()">Guardar</button>
+    </div>
+  `);
+}
+async function guardarEmpleado() {
+  const nombre=$('#enNombre').value.trim();
+  const pin=$('#enPin').value.trim();
+  if(!nombre||pin.length!==4){toast('Nombre y PIN de 4 dígitos requeridos','error');return;}
+  await dbPut('empleados',{nombre,pin,rol:'empleado',tipo:$('#enTipo').value,activo:true});
+  closeModal(); toast('Empleado creado ✔','success'); await renderEmpleados();
+}
+function editarPinModal(id) {
+  openModal(`
+    <div class="modal-title">Cambiar PIN</div>
+    <div class="input-group"><label class="input-label">Nuevo PIN (4 dígitos)</label><input class="input" id="npPin" type="tel" maxlength="4" placeholder="5678"/></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary btn-full" onclick="guardarPin('${id}')">Guardar</button>
+    </div>
+  `);
+}
+async function guardarPin(id) {
+  const pin=$('#npPin').value.trim();
+  if(pin.length!==4){toast('PIN de 4 dígitos requerido','error');return;}
+  const emps=await dbGetAll('empleados');
+  const e=emps.find(x=>x.id===id); if(!e) return;
+  await dbPut('empleados',{...e,pin});
+  closeModal(); toast('PIN actualizado ✔','success'); await renderEmpleados();
+}
+async function desactivarEmp(id) {
+  confirmModal('¿Desactivar este empleado? (Se conserva su historial)',async()=>{
+    const emps=await dbGetAll('empleados');
+    const e=emps.find(x=>x.id===id); if(!e) return;
+    await dbPut('empleados',{...e,activo:false});
+    toast('Empleado desactivado','info'); await renderEmpleados();
+  });
+}
+async function activarEmp(id) {
+  const emps=await dbGetAll('empleados');
+  const e=emps.find(x=>x.id===id); if(!e) return;
+  await dbPut('empleados',{...e,activo:true});
+  toast('Empleado reactivado ✔','success'); await renderEmpleados();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: SERVICIOS
+// ═══════════════════════════════════════════════════════════════
+async function renderServicios() {
+  const el=$('#view-servicios');
+  const svcs=await dbGetAll('servicios');
+  el.innerHTML=`
+    <p class="view-title">Servicios y Precios</p>
+    <p class="view-sub">Editá los precios y comisiones</p>
+    ${svcs.map(s=>`
+      <div class="card">
+        <div class="flex-between mb-sm">
+          <p class="fw-bold">${s.nombre}</p>
+          <strong class="text-gold">${fmoney(s.precio)}</strong>
+        </div>
+        <p class="text-muted" style="font-size:.78rem">${s.descripcion||''}</p>
+        <p class="text-muted" style="font-size:.78rem;margin-top:4px">Comisión: ${s.comisionPct||0}%</p>
+        <button class="btn btn-secondary btn-sm mt-sm" onclick="editarServicioModal('${s.id}')">✏️ Editar</button>
+      </div>`).join('')}
+  `;
+}
+async function editarServicioModal(id) {
+  const svcs=await dbGetAll('servicios');
+  const s=svcs.find(x=>x.id===id); if(!s) return;
+  openModal(`
+    <div class="modal-title">✏️ Editar Servicio</div>
+    <div class="input-group"><label class="input-label">Nombre</label><input class="input" id="esNombre" value="${s.nombre}"/></div>
+    <div class="input-group"><label class="input-label">Precio ($)</label><input class="input" id="esPrecio" type="number" value="${s.precio}"/></div>
+    <div class="input-group"><label class="input-label">Comisión (%)</label><input class="input" id="esComision" type="number" value="${s.comisionPct||0}" min="0" max="100"/></div>
+    <div class="input-group"><label class="input-label">Descripción</label><textarea class="input" id="esDesc" rows="2">${s.descripcion||''}</textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary btn-full" onclick="guardarServicio('${id}')">Guardar</button>
+    </div>
+  `);
+}
+async function guardarServicio(id) {
+  const svcs=await dbGetAll('servicios');
+  const s=svcs.find(x=>x.id===id); if(!s) return;
+  await dbPut('servicios',{...s,
+    nombre:$('#esNombre').value.trim()||s.nombre,
+    precio:Number($('#esPrecio').value)||s.precio,
+    comisionPct:Number($('#esComision').value)||0,
+    descripcion:$('#esDesc').value.trim()
+  });
+  closeModal(); toast('Servicio actualizado ✔','success'); await renderServicios();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: RECORDATORIOS
+// ═══════════════════════════════════════════════════════════════
+async function renderRecordatorios() {
+  const el=$('#view-recordatorios');
+  const [clientes, lavados]=await Promise.all([dbGetAll('clientes'),dbGetAll('lavados')]);
+  const pendientes=clientes.map(c=>{
+    const lc=lavados.filter(l=>l.clienteId===c.id&&l.estado==='listo').sort((a,b)=>b.fechaInicio?.localeCompare(a.fechaInicio));
+    const ultimo=lc[0];
+    const dias=ultimo?daysSince(ultimo.fechaInicio):null;
+    return {...c, dias, ultimoServicio:ultimo?.servicioNombre};
+  }).filter(c=>c.dias!==null&&c.dias>=25).sort((a,b)=>b.dias-a.dias);
+  el.innerHTML=`
+    <p class="view-title">Recordatorios</p>
+    <p class="view-sub">${pendientes.filter(c=>c.dias>=30).length} cliente${pendientes.filter(c=>c.dias>=30).length!==1?'s':''} con 30+ días sin lavar</p>
+    ${pendientes.length===0?`<div class="empty"><span class="empty-icon">✨</span><p>¡Todos los clientes tienen su mantenimiento al día!</p></div>`:pendientes.map(c=>`
+      <div class="card ${c.dias>=30?'card-gold':''}">
+        <div class="flex-between mb-sm">
+          <div>
+            <p class="fw-bold">${c.nombre}</p>
+            <p class="text-muted" style="font-size:.78rem">📞 ${c.telefono}</p>
+            ${c.ultimoServicio?`<p class="text-muted" style="font-size:.78rem">Último: ${c.ultimoServicio}</p>`:''}
+          </div>
+          <span class="chip ${c.dias>=30?'chip-proc':'chip-wait'}" style="${c.dias>=30?'color:var(--danger)':''}">Hace ${c.dias}d</span>
+        </div>
+        <div class="flex-gap">
+          <button class="btn btn-wa btn-sm" onclick="recordatorioWA('${c.id}')">💬 WhatsApp</button>
+          <button class="btn btn-primary btn-sm" onclick="agendarDesdeRecordatorio('${c.id}')">📅 Agendar</button>
+        </div>
+      </div>`).join('')}
+  `;
+}
+async function recordatorioWA(id) {
+  const todos=await dbGetAll('clientes');
+  const c=todos.find(x=>x.id===id); if(!c) return;
+  const tel='549'+c.telefono.replace(/\D/g,'');
+  const msg=encodeURIComponent(`¡Hola ${c.nombre}! Ya pasaron 30 días desde tu último lavado en LavaderoCF. ¿Querés agendar un nuevo turno de mantenimiento? Respondé este mensaje y coordinamos. ✨`);
+  window.open(`https://wa.me/${tel}?text=${msg}`,'_blank');
+}
+async function agendarDesdeRecordatorio(id) {
+  const [todos, lavados]=await Promise.all([dbGetAll('clientes'),dbGetAll('lavados')]);
+  const c=todos.find(x=>x.id===id); if(!c) return;
+  regCliente=c;
+  await navTo('registro');
+  const el=$('#regClienteInfo');
+  if(el){el.style.display='block';$('#regClienteNombre').textContent=c.nombre+' ✔';$('#regClienteDetalle').textContent='Tel: '+c.telefono;}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: IA
+// ═══════════════════════════════════════════════════════════════
+async function renderIA() {
+  const el=$('#view-ia');
+  const [lavados, clientes, costos, servicios]=await Promise.all([dbGetAll('lavados'),dbGetAll('clientes'),dbGetAll('costos'),dbGetAll('servicios')]);
+  const apiKey=await dbCfg('api_key_ia');
+  const recs=generarRecsLocales(lavados, clientes, costos, servicios);
+  el.innerHTML=`
+    <p class="view-title">Recomendaciones IA</p>
+    <p class="view-sub">Análisis basado en tus datos</p>
+    <div class="flex-gap mb-md">
+      <span class="chip ${apiKey?'chip-done':'chip-wait'}">${apiKey?'🤖 IA Conectada':'🧠 Análisis Local'}</span>
+    </div>
+    ${recs.map(r=>`
+      <div class="card ${r.prioridad==='alta'?'card-gold':''}">
+        <div class="flex-between mb-sm">
+          <p class="fw-bold">${r.icono} ${r.titulo}</p>
+          <span class="chip ${r.prioridad==='alta'?'chip-proc':r.prioridad==='baja'?'chip-done':'chip-wait'}">${r.prioridad}</span>
+        </div>
+        <p class="text-muted" style="font-size:.85rem">${r.descripcion}</p>
+      </div>`).join('')}
+    ${!apiKey?`<div class="card mt-md"><p class="fw-bold">Conectar IA Externa (Grok)</p><p class="text-muted" style="font-size:.82rem;margin:8px 0">Agregá tu API key en Configuración para obtener análisis potenciados.</p><button class="btn btn-secondary btn-sm" onclick="navTo('config')">Ir a Configuración</button></div>`:''}
+  `;
+}
+function generarRecsLocales(lavados, clientes, costos, servicios) {
+  const recs=[];
+  const hoy=new Date();
+  const ultimos30=lavados.filter(l=>{const d=new Date(l.fechaInicio);return (hoy-d)<30*86400000;});
+  if(ultimos30.length===0) recs.push({icono:'📊',titulo:'Sin datos recientes',descripcion:'No hay lavados en los últimos 30 días. Registrá el primer servicio del día.',prioridad:'alta'});
+  const pendRec=clientes.filter(c=>{const lc=lavados.filter(l=>l.clienteId===c.id).sort((a,b)=>b.fechaInicio?.localeCompare(a.fechaInicio));return lc.length>0&&daysSince(lc[0].fechaInicio)>=30;});
+  if(pendRec.length>=10) recs.push({icono:'🔔',titulo:'Muchos recordatorios pendientes',descripcion:`Tenés ${pendRec.length} clientes sin lavar hace 30+ días. Enviá los recordatorios de WhatsApp hoy.`,prioridad:'alta'});
+  const hoyStr=todayISO();
+  const lavadosHoy=lavados.filter(l=>l.fechaInicio?.startsWith(hoyStr)&&l.estado==='en_espera').length;
+  if(lavadosHoy>=3) recs.push({icono:'⚡',titulo:'Cola larga hoy',descripcion:`Hay ${lavadosHoy} vehículos en espera. Considerá llamar a un refuerzo.`,prioridad:'alta'});
+  if(!costos.some(c=>c.fecha===hoyStr)) recs.push({icono:'📋',titulo:'Registrá los costos del día',descripcion:'No cargaste ningún costo hoy. Mantener los costos actualizados mejora el cálculo de ganancia neta.',prioridad:'media'});
+  const byServicio={};
+  ultimos30.filter(l=>l.estado==='listo').forEach(l=>{if(!byServicio[l.servicioId])byServicio[l.servicioId]=0;byServicio[l.servicioId]++;});
+  const totalL=Object.values(byServicio).reduce((s,v)=>s+v,0);
+  if(totalL>0){const maxEntry=Object.entries(byServicio).sort((a,b)=>b[1]-a[1])[0];if(maxEntry&&maxEntry[1]/totalL>0.7){const svc=servicios.find(s=>s.id===maxEntry[0]);recs.push({icono:'⚠️',titulo:'Dependencia de un servicio',descripcion:`El ${svc?.nombre||'mismo servicio'} representa más del 70% de tus ingresos. Intentá promover los otros servicios.`,prioridad:'media'});}}
+  if(recs.length===0) recs.push({icono:'✅',titulo:'Todo en orden',descripcion:'No hay alertas urgentes. ¡Seguí así!',prioridad:'baja'});
+  return recs;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: CONFIGURACIÓN
+// ═══════════════════════════════════════════════════════════════
+async function renderConfig() {
+  const el=$('#view-config');
+  const [nombre, tel, apiKey, ver]=await Promise.all([dbCfg('nombre_negocio'),dbCfg('telefono_negocio'),dbCfg('api_key_ia'),dbCfg('version')]);
+  const url=location.origin+location.pathname;
+  el.innerHTML=`
+    <p class="view-title">Configuración</p>
+    <div class="section-head">Datos del negocio</div>
+    <div class="input-group"><label class="input-label">Nombre</label><input class="input" id="cfgNombre" value="${nombre||'LavaderoCF'}"/></div>
+    <div class="input-group"><label class="input-label">Teléfono</label><input class="input" id="cfgTel" value="${tel||''}" type="tel"/></div>
+    <button class="btn btn-primary btn-sm mb-md" onclick="guardarConfigNegocio()">Guardar datos</button>
+    <div class="section-head">Copia de seguridad</div>
+    <button class="btn btn-secondary btn-full mb-sm" onclick="exportarBackup()">📥 Descargar backup (.json)</button>
+    <div class="input-group"><label class="input-label">Restaurar desde backup</label><input type="file" accept=".json" class="input" id="backupFile" style="padding:10px"/></div>
+    <button class="btn btn-danger btn-sm mb-md" onclick="importarBackup()">⚠️ Restaurar datos</button>
+    <div class="section-head">IA Externa (Grok)</div>
+    <div class="input-group">
+      <label class="input-label">API Key de Grok</label>
+      <input class="input" id="cfgApiKey" type="password" value="${apiKey||''}" placeholder="xai-..."/>
+    </div>
+    <button class="btn btn-secondary btn-sm mb-md" onclick="guardarApiKey()">Guardar API Key</button>
+    <div class="section-head">Link de reservas</div>
+    <div class="card" style="word-break:break-all;font-size:.82rem;margin-bottom:8px">${url}#/reserva</div>
+    <button class="btn btn-secondary btn-sm mb-md" onclick="navigator.clipboard.writeText('${url}#/reserva').then(()=>toast('Link copiado ✔','success'))">📋 Copiar link</button>
+    <div class="hr"></div>
+    <div class="flex-between">
+      <span class="text-muted" style="font-size:.78rem">v${ver||'1.0.0'}</span>
+      <button class="btn btn-secondary btn-sm" onclick="cerrarSesion()">Cerrar sesión</button>
+    </div>
+  `;
+}
+async function guardarConfigNegocio() {
+  await dbCfg('nombre_negocio',$('#cfgNombre').value.trim()||'LavaderoCF');
+  await dbCfg('telefono_negocio',$('#cfgTel').value.trim());
+  toast('Guardado ✔','success');
+}
+async function guardarApiKey() {
+  await dbCfg('api_key_ia',$('#cfgApiKey').value.trim());
+  toast('API Key guardada ✔','success');
+}
+async function exportarBackup() {
+  const data=await dbExport();
+  const json=JSON.stringify(data,null,2);
+  const a=document.createElement('a');
+  a.href='data:application/json;charset=utf-8,'+encodeURIComponent(json);
+  a.download=`lavaderocf-backup-${todayISO()}.json`;
+  a.click();
+  await dbCfg('ultimo_backup',new Date().toISOString());
+  toast('Backup descargado ✔','success');
+}
+async function importarBackup() {
+  const file=$('#backupFile')?.files[0];
+  if(!file){toast('Seleccioná un archivo .json','error');return;}
+  confirmModal('⚠️ Esto reemplazará TODOS los datos actuales con los del archivo. ¿Estás seguro?',async()=>{
+    try {
+      const text=await file.text();
+      const data=JSON.parse(text);
+      await dbImport(data);
+      toast('Datos restaurados ✔ Recargando...','success');
+      await delay(1500);
+      location.reload();
+    } catch(e) { toast('El archivo no es válido o está dañado.','error'); }
+  },'Sí, restaurar');
+}
+function cerrarSesion() {
+  confirmModal('¿Cerrar sesión?',()=>{auth.clear();goTo('login');},);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PANEL DE RESERVAS PÚBLICO
+// ═══════════════════════════════════════════════════════════════
+let resStep=1, resServicio=null, resVehiculo='auto', resFecha=null, resHora=null;
+async function renderReserva() {
+  resStep=1; resServicio=null; resVehiculo='auto'; resFecha=null; resHora=null;
+  await renderResStep();
+}
+async function renderResStep() {
+  const ct=$('#reservaContent'); if(!ct) return;
+  const duraciones={auto:60,camioneta:90,'4x4':120};
+  if(resStep===1) {
+    const svcs=await dbGetAll('servicios');
+    ct.innerHTML=`
+      <div class="stepper">
+        <div class="step active">1</div><div class="step-line"></div>
+        <div class="step">2</div><div class="step-line"></div>
+        <div class="step">3</div>
+      </div>
+      <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 1 de 3 — Elegí tu servicio</p>
+      <div class="section-head">Tipo de vehículo</div>
+      <div class="vehicle-grid">
+        <button class="vehicle-btn selected" id="rvt-auto" onclick="resSelVehiculo('auto')"><span class="icon">🚗</span>Auto</button>
+        <button class="vehicle-btn" id="rvt-camioneta" onclick="resSelVehiculo('camioneta')"><span class="icon">🚐</span>Camioneta</button>
+        <button class="vehicle-btn" id="rvt-4x4" onclick="resSelVehiculo('4x4')"><span class="icon">🚙</span>4x4</button>
+      </div>
+      <div class="section-head">Servicio</div>
+      <div class="services-grid">
+        ${svcs.filter(s=>s.activo).map(s=>`<div class="service-card" id="rsc-${s.id}" onclick="resSelServicio('${s.id}')">
+          <div class="service-name">${s.nombre}</div>
+          <div class="service-price">${fmoney(s.precio)}</div>
+          <div class="service-desc">${s.descripcion||''}</div>
+        </div>`).join('')}
+      </div>
+      <button class="btn btn-primary btn-full" id="resSig1" onclick="resNext()" disabled>Siguiente →</button>
+    `;
+  } else if(resStep===2) {
+    const hoy=new Date();
+    const dias=[];
+    let d=new Date(hoy);
+    while(dias.length<4){ d.setDate(d.getDate()+1); dias.push(new Date(d)); }
+    const turnos=await dbGetAll('turnos');
+    const dur=duraciones[resVehiculo]||60;
+    function slots(fecha) {
+      const dom=fecha.getDay()===0;
+      const start=dom?9:8; const end=dom?16:17;
+      const list=[];
+      for(let h=start*60;h<end*60;h+=dur){
+        const hh=String(Math.floor(h/60)).padStart(2,'0');
+        const mm=String(h%60).padStart(2,'0');
+        list.push(`${hh}:${mm}`);
+      }
+      return list;
+    }
+    function isoDate(d){ return d.toISOString().slice(0,10); }
+    ct.innerHTML=`
+      <div class="stepper">
+        <div class="step done">✓</div><div class="step-line"></div>
+        <div class="step active">2</div><div class="step-line"></div>
+        <div class="step">3</div>
+      </div>
+      <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 2 de 3 — Elegí día y horario</p>
+      <div class="section-head">Día</div>
+      <div class="date-grid">
+        ${dias.map(d=>`<button class="date-btn" id="rfd-${isoDate(d)}" onclick="resSelFecha('${isoDate(d)}')">${fdateDay(isoDate(d))}</button>`).join('')}
+      </div>
+      <div id="resSlots"></div>
+      <button class="btn btn-secondary btn-sm mb-md" onclick="resStep=1;renderResStep()">← Volver</button>
+      <button class="btn btn-primary btn-full" id="resSig2" onclick="resNext()" disabled>Siguiente →</button>
+    `;
+  } else if(resStep===3) {
+    ct.innerHTML=`
+      <div class="stepper">
+        <div class="step done">✓</div><div class="step-line"></div>
+        <div class="step done">✓</div><div class="step-line"></div>
+        <div class="step active">3</div>
+      </div>
+      <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 3 de 3 — Tus datos</p>
+      <div class="input-group"><label class="input-label">Nombre completo *</label><input class="input" id="resNombre" placeholder="Juan Pérez" oninput="resBuscarCliente()"/></div>
+      <div class="input-group"><label class="input-label">Teléfono *</label><input class="input" id="resTel" type="tel" placeholder="2487123456" oninput="resBuscarTel()"/></div>
+      <div id="resClienteDetected"></div>
+      <button class="btn btn-secondary btn-sm mb-md" onclick="resStep=2;renderResStep()">← Volver</button>
+      <button class="btn btn-primary btn-full" onclick="resConfirmar()">✔ Confirmar reserva</button>
+    `;
+  }
+}
+function resSelVehiculo(tipo){
+  resVehiculo=tipo;
+  ['auto','camioneta','4x4'].forEach(t=>{const b=$(`#rvt-${t}`);if(b)b.classList.toggle('selected',t===tipo);});
+  if(resServicio){const ok=$('#resSig1');if(ok)ok.disabled=false;}
+}
+function resSelServicio(id){
+  resServicio=id;
+  $$('.service-card').forEach(c=>c.classList.toggle('selected',c.id===`rsc-${id}`));
+  const ok=$('#resSig1'); if(ok) ok.disabled=false;
+}
+async function resSelFecha(fecha){
+  resFecha=fecha; resHora=null;
+  $$('.date-btn').forEach(b=>b.classList.toggle('selected',b.id===`rfd-${fecha}`));
+  const turnos=await dbGetAll('turnos');
+  const duraciones={auto:60,camioneta:90,'4x4':120};
+  const dur=duraciones[resVehiculo]||60;
+  const d=new Date(fecha+'T12:00:00');
+  const dom=d.getDay()===0;
+  const start=dom?9:8; const end=dom?16:17;
+  const slots=[];
+  for(let h=start*60;h<end*60;h+=dur){
+    const hh=String(Math.floor(h/60)).padStart(2,'0');
+    const mm=String(h%60).padStart(2,'0');
+    slots.push(`${hh}:${mm}`);
+  }
+  const ocupados=turnos.filter(t=>t.fecha===fecha&&(t.estado==='pendiente'||t.estado==='confirmado')).map(t=>t.hora);
+  const sl=$('#resSlots');
+  if(sl) sl.innerHTML=`<div class="section-head">Horario</div><div class="time-grid">${slots.map(s=>`<button class="time-btn${ocupados.includes(s)?' ':''}${ocupados.includes(s)?'" disabled':'"'} id="rt-${s}" onclick="resSelHora('${s}')">${ocupados.includes(s)?s+' ✗':s}</button>`).join('')}</div>`;
+}
+function resSelHora(hora){
+  resHora=hora;
+  $$('.time-btn').forEach(b=>b.classList.toggle('selected',b.id===`rt-${hora}`));
+  const ok=$('#resSig2'); if(ok) ok.disabled=false;
+}
+function resNext(){
+  if(resStep===1&&resServicio) { resStep=2; renderResStep(); }
+  else if(resStep===2&&resFecha&&resHora) { resStep=3; renderResStep(); }
+}
+async function resBuscarTel() {
+  const tel=$('#resTel')?.value.trim();
+  if(!tel||tel.length<6) return;
+  const todos=await dbGetAll('clientes');
+  const c=todos.find(x=>x.telefono===tel);
+  const det=$('#resClienteDetected');
+  if(det&&c) det.innerHTML=`<div class="card card-gold mt-sm" style="font-size:.85rem">✔ <strong>${c.nombre}</strong> — ya sos cliente de LavaderoCF.</div>`;
+  else if(det) det.innerHTML='';
+}
+function resBuscarCliente(){} // solo por compatibilidad
+async function resConfirmar(){
+  const nombre=$('#resNombre')?.value.trim();
+  const tel=$('#resTel')?.value.trim();
+  if(!nombre||!tel){toast('Completá nombre y teléfono','error');return;}
+  if(!resFecha||!resHora){toast('Seleccioná día y horario','error');return;}
+  const todos=await dbGetAll('clientes');
+  let c=todos.find(x=>x.telefono===tel);
+  if(!c) c=await dbPut('clientes',{nombre,telefono:tel,patentes:[],email:'',creadoEn:new Date().toISOString()});
+  const svcs=await dbGetAll('servicios');
+  const svc=svcs.find(s=>s.id===resServicio);
+  await dbPut('turnos',{clienteId:c.id,clienteNombre:nombre,clienteTelefono:tel,servicioId:resServicio,servicioNombre:svc?.nombre||'',tipoVehiculo:resVehiculo,fecha:resFecha,hora:resHora,estado:'pendiente',creadoEn:new Date().toISOString()});
+  const ct=$('#reservaContent');
+  if(ct) ct.innerHTML=`
+    <div style="text-align:center;padding:24px 0">
+      <div style="font-size:3rem;margin-bottom:12px">✅</div>
+      <h3 class="font-serif text-gold" style="font-size:1.3rem;margin-bottom:8px">¡Turno reservado!</h3>
+      <div class="confirm-box">
+        <div class="confirm-row"><span>Servicio</span><strong>${svc?.nombre||'—'}</strong></div>
+        <div class="confirm-row"><span>Fecha</span><strong>${fdateDay(resFecha)}</strong></div>
+        <div class="confirm-row"><span>Hora</span><strong>${resHora}</strong></div>
+        <div class="confirm-row"><span>Precio</span><strong class="text-gold">${fmoney(svc?.precio||0)}</strong></div>
+      </div>
+      <button class="btn btn-primary btn-full mt-md" onclick="renderReserva()">Hacer otra reserva</button>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HASH ROUTER
+// ═══════════════════════════════════════════════════════════════
+function handleHash() {
+  const hash=location.hash||'#/';
+  if(hash==='#/reserva') { showScreen('reserva'); renderReserva(); }
+  else if(hash.startsWith('#/')) {
+    const user=auth.get();
+    if(!user) { showScreen('login'); }
+    else { goTo('main'); renderView(auth.isDueno()?'dashboard':'registro'); }
+  }
+}
+window.addEventListener('hashchange', handleHash);
+
+// ═══════════════════════════════════════════════════════════════
+//  APP INIT
+// ═══════════════════════════════════════════════════════════════
+async function appInit() {
+  try {
+    await Promise.all([dbOpen(), new Promise(r=>setTimeout(r,1600))]);
+    await seeds();
+  } catch(e) {
+    console.error('Init error:', e);
+  }
+  // Ocultar splash
+  const splash=document.getElementById('splash');
+  splash.style.opacity='0';
+  setTimeout(()=>splash.remove(), 500);
+  // Mostrar app
+  document.getElementById('app').style.display='block';
+  // Login
+  await initLogin();
+  showScreen('login');
+}
+
+appInit();
+</script>
+
+<!-- SERVICE WORKER -->
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
+</script>
 </body>
 </html>
