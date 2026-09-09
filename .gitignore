@@ -1,0 +1,8 @@
+# Archivos que no deben subirse al repositorio
+node_modules/
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
+.tmp/

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="description" content="LavaderoCF — El esplendor que tu coche merece. App de gestión." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="LavaderoCF" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <title>LavaderoCF</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Apple Touch Icons -->
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/icon-192.png" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
+
+  <!-- Google Fonts — preconectado para performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- CSS Layer (orden importa) -->
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SPLASH SCREEN — Visible durante la inicialización de la DB
+       ═══════════════════════════════════════════════════════════ -->
+  <div id="splash-screen" class="splash-screen" aria-label="Cargando LavaderoCF" role="status">
+    <div class="splash-content">
+      <div class="splash-logo-wrap">
+        <img src="assets/logo.jpg" alt="LavaderoCF logo" class="splash-logo" />
+      </div>
+      <h1 class="splash-brand font-serif">LavaderoCF</h1>
+      <p class="splash-slogan">El esplendor que tu coche merece</p>
+      <div class="splash-loader" aria-hidden="true">
+        <div class="splash-loader-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CONTENEDOR PRINCIPAL DE LA APP
+       El router inyecta las vistas aquí
+       ═══════════════════════════════════════════════════════════ -->
+  <div id="app" class="app-shell" style="display:none;" role="main">
+    <!-- Las vistas se renderizan aquí dinámicamente -->
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CONTENEDOR DE TOASTS (notificaciones flotantes)
+       ═══════════════════════════════════════════════════════════ -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CONTENEDOR DE MODALES
+       ═══════════════════════════════════════════════════════════ -->
+  <div id="modal-container" class="modal-container" role="dialog" aria-modal="true"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       ENTRY POINT — ES Module
+       ═══════════════════════════════════════════════════════════ -->
+  <script type="module" src="js/app.js"></script>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SERVICE WORKER REGISTRATION
+       ═══════════════════════════════════════════════════════════ -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker
+          .register('/sw.js')
+          .then(reg => {
+            console.log('[LavaderoCF] Service Worker registrado:', reg.scope);
+            // Notificar al usuario si hay una nueva versión disponible
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  console.log('[LavaderoCF] Nueva versión disponible. Recargá la app.');
+                }
+              });
+            });
+          })
+          .catch(err => console.warn('[LavaderoCF] Service Worker no disponible:', err));
+      });
+    }
+  </script>
+
+</body>
+</html>
