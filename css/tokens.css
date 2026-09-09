@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap');
+
+:root {
+  /* Colors */
+  --color-bg: #000000;
+  --color-surface: #111111;
+  --color-surface-2: #222222;
+  --color-gold: #c9a227;
+  --color-gold-dim: rgba(201, 162, 39, 0.2);
+  --color-text: #f5f0e8;
+  --color-text-muted: #999999;
+  --color-success: #28a745;
+  --color-danger: #dc3545;
+  --color-warning: #ffc107;
+  --color-whatsapp: #25D366;
+
+  /* Typography */
+  --font-sans: 'Inter', sans-serif;
+  --font-serif: 'Playfair Display', serif;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(201, 162, 39, 0.1);
+  --shadow-md: 0 4px 6px rgba(201, 162, 39, 0.15);
+  --shadow-lg: 0 10px 15px rgba(201, 162, 39, 0.2);
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 400ms ease;
+
+  /* Touch Min */
+  --touch-min: 48px;
+  --touch-lg: 56px;
+
+  /* Z-index */
+  --z-header: 100;
+  --z-overlay: 900;
+  --z-modal: 1000;
+  --z-toast: 1100;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+  --space-6: 48px;
+  --space-8: 64px;
+}

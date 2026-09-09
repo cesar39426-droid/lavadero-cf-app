@@ -1,0 +1,77 @@
+/* Keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes slideInUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes slideInDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes goldGlow {
+  0% { text-shadow: 0 0 10px rgba(201, 162, 39, 0.2); }
+  50% { text-shadow: 0 0 20px rgba(201, 162, 39, 0.6); }
+  100% { text-shadow: 0 0 10px rgba(201, 162, 39, 0.2); }
+}
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+/* Page Transitions */
+.page-enter {
+  animation: fadeIn var(--transition-normal) forwards;
+}
+.page-leave {
+  animation: fadeOut var(--transition-fast) forwards;
+}
+
+/* Spinners */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Skeletons */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-surface) 50%, var(--color-surface-2) 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+/* Toast */
+.toast-enter {
+  animation: slideInUp var(--transition-normal) forwards;
+}
+.toast-leave {
+  animation: fadeOut var(--transition-fast) forwards;
+}
+
+/* Logo / Splash */
+.splash-logo {
+  animation: goldGlow 2s ease-in-out infinite;
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
