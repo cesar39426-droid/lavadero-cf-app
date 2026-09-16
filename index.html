@@ -495,24 +495,24 @@ async function seeds() {
   const svcs = await dbGetAll('servicios');
   if (svcs.length === 0) {
     const list = [
-      {nombre:'Lavado Estándar',  precioAuto:30000, precioCamioneta:35000, precio4x4:40000,  precio:30000, descripcion:'Lavado exterior artesanal, aspirado profundo, acondicionado de plásticos interiores', comisionPct:15, activo:true},
-      {nombre:'Lavado Premium',   precioAuto:80000, precioCamioneta:95000, precio4x4:110000, precio:80000, descripcion:'Lavado exterior artesanal y de llantas, aspirado profundo y detallado, acondicionado de plásticos/burletes/gomas, incluye limpieza intensiva de marcos de puertas', comisionPct:15, activo:true},
-      {nombre:'Lavado de Motor',  precioAuto:50000, precioCamioneta:55000, precio4x4:60000,  precio:50000, descripcion:'Limpieza técnica detallada del sector motor', comisionPct:10, activo:true},
-      {nombre:'Tapizado Clásica', precioAuto:150000,precioCamioneta:175000,precio4x4:200000, precio:150000,descripcion:'Limpieza profunda de tapizados in-situ (sin desarmar butacas), incluye Lavado Estándar', comisionPct:10, activo:true},
+      {nombre:'Lavado Estándar',  precioAuto:30000, precioCamioneta:35000, precio4x4:40000,  precio:30000, variaSegunVehiculo:true,  descripcion:'Lavado exterior artesanal, aspirado profundo, acondicionado de plásticos interiores', comisionPct:15, activo:true},
+      {nombre:'Lavado Premium',   precioAuto:80000, precioCamioneta:95000, precio4x4:110000, precio:80000, variaSegunVehiculo:true,  descripcion:'Lavado exterior artesanal y de llantas, aspirado profundo y detallado, acondicionado de plásticos/burletes/gomas, incluye limpieza intensiva de marcos de puertas', comisionPct:15, activo:true},
+      {nombre:'Lavado de Motor',  precioAuto:50000, precioCamioneta:50000, precio4x4:50000,  precio:50000, variaSegunVehiculo:false, descripcion:'Limpieza técnica detallada del sector motor', comisionPct:10, activo:true},
+      {nombre:'Tapizado Clásica', precioAuto:150000,precioCamioneta:150000,precio4x4:150000, precio:150000,variaSegunVehiculo:false, descripcion:'Limpieza profunda de tapizados in-situ (sin desarmar butacas), incluye Lavado Estándar', comisionPct:10, activo:true},
     ];
     for (const s of list) await dbPut('servicios', s);
   } else {
     // Migrar servicios existentes que no tienen precios por vehículo
     const defaultPrices = {
-      'Lavado Estándar':  { precioAuto:30000, precioCamioneta:35000, precio4x4:40000  },
-      'Lavado Premium':   { precioAuto:80000, precioCamioneta:95000, precio4x4:110000 },
-      'Lavado de Motor':  { precioAuto:50000, precioCamioneta:55000, precio4x4:60000  },
-      'Tapizado Clásica': { precioAuto:150000,precioCamioneta:175000,precio4x4:200000 },
+      'Lavado Estándar':  { precioAuto:30000, precioCamioneta:35000,  precio4x4:40000,  variaSegunVehiculo:true  },
+      'Lavado Premium':   { precioAuto:80000, precioCamioneta:95000,  precio4x4:110000, variaSegunVehiculo:true  },
+      'Lavado de Motor':  { precioAuto:50000, precioCamioneta:50000,  precio4x4:50000,  variaSegunVehiculo:false },
+      'Tapizado Clásica': { precioAuto:150000,precioCamioneta:150000, precio4x4:150000, variaSegunVehiculo:false },
     };
     for (const s of svcs) {
-      if (!s.precioAuto) {
+      if (!s.precioAuto || s.variaSegunVehiculo === undefined) {
         const dp = defaultPrices[s.nombre];
-        const base = dp || { precioAuto: s.precio, precioCamioneta: Math.round(s.precio*1.17), precio4x4: Math.round(s.precio*1.33) };
+        const base = dp || { precioAuto: s.precio, precioCamioneta: s.precio, precio4x4: s.precio, variaSegunVehiculo: false };
         await dbPut('servicios', { ...s, ...base, precio: s.precio || base.precioAuto });
       }
     }
@@ -800,10 +800,21 @@ async function renderRegistro() {
       </button>
     </div>
 
-    <!-- ── PASO 3: SERVICIO ── -->
-    <div class="section-head">3 · Servicio <span id="regVehiculoLabel" style="color:var(--gold);font-size:.75rem;text-transform:none;font-weight:400">— Auto</span></div>
+    <!-- ── PASO 3: VEHÍCULO (marca/modelo/patente) ── -->
+    <div class="section-head">3 · Datos del vehículo</div>
+    <div class="input-group">
+      <label class="input-label">Marca y modelo <span style="color:var(--muted);font-size:.78rem">(Ej: Ford Ranger, Toyota Corolla)</span></label>
+      <input class="input" id="regModelo" placeholder="Ej: Renault Sandero, VW Amarok..."/>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Patente</label>
+      <input class="input" id="regPatenteVehiculo" placeholder="AB123CD" style="text-transform:uppercase"/>
+    </div>
+
+    <!-- ── PASO 4: SERVICIO ── -->
+    <div class="section-head">4 · Servicio <span id="regVehiculoLabel" style="color:var(--gold);font-size:.75rem;text-transform:none;font-weight:400">— Auto</span></div>
     <p style="color:var(--muted);font-size:.78rem;margin-bottom:10px">Tocá una opción para seleccionarla</p>
-    <div id="regServicios">
+    <div id="regServicios" class="services-grid">
       ${servicios.filter(s => s.activo).map(s => {
         const p = s.precioAuto || s.precio;
         return `<div class="service-card" id="sc-${s.id}" data-id="${s.id}" onclick="selServicio('${s.id}')">
@@ -814,16 +825,16 @@ async function renderRegistro() {
       }).join('')}
     </div>
 
-    <!-- ── PASO 4: EMPLEADO (solo dueño) ── -->
+    <!-- ── PASO 5: EMPLEADO (solo dueño) ── -->
     ${user.rol === 'dueno' ? `
-    <div class="section-head">4 · Empleado asignado</div>
+    <div class="section-head">5 · Empleado asignado</div>
     <div class="input-group"><select class="input" id="regEmpId">
       <option value="">— Seleccionar empleado —</option>
       ${empleados.filter(e => e.activo).map(e => `<option value="${e.id}">${e.nombre}${e.rol==='dueno'?' 👑':''}</option>`).join('')}
     </select></div>` : ''}
 
     <!-- ── NOTAS ── -->
-    <div class="section-head">${user.rol === 'dueno' ? '5' : '4'} · Notas (opcional)</div>
+    <div class="section-head">${user.rol === 'dueno' ? '6' : '5'} · Notas (opcional)</div>
     <div class="input-group"><textarea class="input" id="regNotas" rows="2" maxlength="200" placeholder="Ej: quiere que laven primero las llantas..."></textarea></div>
 
     <!-- CONFIRMAR -->
@@ -931,6 +942,8 @@ function regLimpiarCliente() {
 }
 
 function getPrecioSegunVehiculo(svc, tipo) {
+  // Si el servicio no varía según vehículo, siempre retorna precio base
+  if (!svc.variaSegunVehiculo) return svc.precioAuto || svc.precio;
   if (tipo === 'camioneta') return svc.precioCamioneta || svc.precio;
   if (tipo === '4x4')       return svc.precio4x4        || svc.precio;
   return svc.precioAuto || svc.precio;
@@ -946,24 +959,41 @@ function selVehiculo(tipo) {
   const labels = { auto: '— Auto', camioneta: '— Camioneta / Familiar', '4x4': '— 4x4 / SUV' };
   const lbl = $('#regVehiculoLabel');
   if (lbl) lbl.textContent = labels[tipo] || '';
-  // Actualizar precios en las cards
+  // Actualizar precios en las cards según vehículo
   (async () => {
     const svcs = await dbGetAll('servicios');
     svcs.filter(s => s.activo).forEach(s => {
       const el = $(`#sp-${s.id}`);
-      if (el) el.textContent = fmoney(getPrecioSegunVehiculo(s, tipo));
+      if (!el) return;
+      const precio = getPrecioSegunVehiculo(s, tipo);
+      el.textContent = fmoney(precio);
+      // Mostrar badge "precio único" para servicios sin variación
+      const card = $(`#sc-${s.id}`);
+      let badge = card?.querySelector('.precio-unico-badge');
+      if (!s.variaSegunVehiculo) {
+        if (card && !badge) {
+          badge = document.createElement('span');
+          badge.className = 'precio-unico-badge';
+          badge.textContent = 'precio único';
+          badge.style.cssText = 'font-size:.68rem;color:var(--muted);margin-left:4px';
+          el.appendChild(badge);
+        }
+      } else if (badge) {
+        badge.remove();
+      }
     });
   })();
 }
 
 function selServicio(id) {
   regServicio = id;
-  // Quitar selección de todas las cards en el área de registro
   const cards = $$('#regServicios .service-card');
   cards.forEach(c => {
-    c.classList.toggle('selected', c.dataset.id === id);
-    // Feedback visual más fuerte
-    c.style.background = c.dataset.id === id ? 'rgba(201,162,39,.12)' : '';
+    const sel = c.dataset.id === String(id);
+    c.classList.toggle('selected', sel);
+    c.style.background    = sel ? 'rgba(201,162,39,.15)' : '';
+    c.style.borderColor   = sel ? 'var(--gold)' : '';
+    c.style.transform     = sel ? 'scale(1.01)' : '';
   });
 }
 
@@ -982,7 +1012,7 @@ async function regConfirmar() {
     if (existe) {
       await regSelCliente(existe.id);
       toast(`⚠️ Ya existe ${existe.nombre} con ese teléfono — cargamos su ficha`, 'info');
-      return; // El usuario debe confirmar manualmente
+      return;
     }
     cliente = await dbPut('clientes', {
       nombre, telefono: tel,
@@ -1000,18 +1030,28 @@ async function regConfirmar() {
     : user.id;
   if (!empId) { toast('Seleccioná un empleado', 'error'); return; }
 
+  // ── Datos del vehículo (del formulario del paso 3) ───────────
+  const modeloVehiculo  = $('#regModelo')?.value.trim() || '';
+  const patenteVehiculo = ($('#regPatenteVehiculo')?.value.trim() || '').toUpperCase();
+  // Agregar patente a la ficha del cliente si es nueva
+  if (patenteVehiculo && !(cliente.patentes || []).includes(patenteVehiculo)) {
+    const patentes = [...(cliente.patentes || []), patenteVehiculo];
+    cliente = await dbPut('clientes', { ...cliente, patentes });
+  }
+
   // ── Calcular precio según vehículo ───────────────────────────
   const svcs = await dbGetAll('servicios');
   const svc  = svcs.find(s => s.id === regServicio);
   if (!svc) { toast('Servicio no encontrado', 'error'); return; }
   const precioFinal = getPrecioSegunVehiculo(svc, regVehiculo);
-  const comMonto = Math.round((precioFinal * (svc.comisionPct || 0)) / 100);
+  const comMonto    = Math.round((precioFinal * (svc.comisionPct || 0)) / 100);
 
   await dbPut('lavados', {
     clienteId:        cliente.id,
     clienteNombre:    cliente.nombre,
     clienteTelefono:  cliente.telefono,
-    patente:          (cliente.patentes || [])[0] || '—',
+    patente:          patenteVehiculo || (cliente.patentes || [])[0] || '—',
+    modeloVehiculo:   modeloVehiculo,
     tipoVehiculo:     regVehiculo,
     servicioId:       regServicio,
     servicioNombre:   svc.nombre,
