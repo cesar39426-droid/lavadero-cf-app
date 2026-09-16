@@ -300,7 +300,7 @@ select.field:focus{outline:none;border-color:var(--gold)}
 <!-- TOASTS -->
 <div id="toast-container"></div>
 
-<script type="module">
+<script>
 // ═══════════════════════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════════════════════
@@ -673,6 +673,10 @@ function updatePinDots() {
   const ok = $('#pinOk'); if(ok) ok.disabled = pinVal.length<4;
 }
 function resetPin()  { pinVal=''; updatePinDots(); }
+window.pinDigit = pinDigit;
+window.pinDel = pinDel;
+window.pinConfirm = pinConfirm;
+window.resetPin = resetPin;
 async function pinConfirm() {
   if (!pinUser || pinVal.length!==4) return;
   if (pinVal===pinUser.pin) {
