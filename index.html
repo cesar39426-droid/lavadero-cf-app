@@ -575,6 +575,7 @@ function buildNav(user) {
     <div class="view" id="view-registro"></div>
     <div class="view" id="view-dia"></div>
     <div class="view" id="view-clientes"></div>
+    <div class="view" id="view-caja"></div>
     <div class="view" id="view-cierre"></div>
     <div class="view" id="view-costos"></div>
     <div class="view" id="view-empleados"></div>
@@ -596,6 +597,7 @@ function buildNav(user) {
         {id:'registro', label:'Registrar',icon:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'},
         {id:'dia',      label:'Hoy',icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'},
         {id:'clientes', label:'Clientes',icon:'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>'},
+        {id:'caja',     label:'Mi Caja',icon:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>'},
       ];
   nav.innerHTML = items.map(it=>`
     <button class="nav-item" data-view="${it.id}" onclick="navTo('${it.id}')">
@@ -616,6 +618,7 @@ async function renderView(id) {
     registro:  renderRegistro,
     dia:       renderDia,
     clientes:  renderClientes,
+    caja:      renderCaja,
     cierre:    renderCierre,
     costos:    renderCostos,
     empleados: renderEmpleados,
@@ -777,7 +780,6 @@ async function renderRegistro() {
       <p class="fw-bold mb-md">Datos del nuevo cliente</p>
       <div class="input-group"><label class="input-label">Nombre *</label><input class="input" id="regNombre" placeholder="Juan Pérez" oninput="regVerificarDuplicado()"/></div>
       <div class="input-group"><label class="input-label">Teléfono *</label><input class="input" id="regTel" type="tel" placeholder="2487123456" oninput="regVerificarDuplicado()"/></div>
-      <div class="input-group"><label class="input-label">Patente</label><input class="input" id="regPatente" placeholder="AB123CD"/></div>
       <div id="regDupWarning" style="display:none" class="card" style="border-color:var(--warn);background:rgba(240,165,0,.08);padding:12px;margin-top:8px">
         <p style="color:var(--warn);font-weight:600;font-size:.88rem">⚠️ Ya existe un cliente con ese teléfono</p>
         <p style="color:var(--muted);font-size:.78rem;margin:4px 0">Hacé clic abajo para usar su ficha y no duplicarlo</p>
@@ -907,7 +909,6 @@ function regOcultarNuevoCliente() {
   $('#regNuevoBtn').style.display = 'block';
   const r = $('#regNombre'); if (r) r.value = '';
   const t = $('#regTel'); if (t) t.value = '';
-  const p = $('#regPatente'); if (p) p.value = '';
 }
 
 let regDupTimer;
@@ -1005,10 +1006,9 @@ async function regConfirmar() {
   if (!cliente) {
     const nombre = $('#regNombre')?.value.trim();
     const tel    = $('#regTel')?.value.trim();
-    const pat    = $('#regPatente')?.value.trim().toUpperCase();
     if (!nombre || !tel) { toast('Completá el nombre y teléfono del cliente', 'error'); return; }
     const todos = await dbGetAll('clientes');
-    const existe = todos.find(c => c.telefono === tel || (pat && (c.patentes || []).includes(pat)));
+    const existe = todos.find(c => c.telefono === tel);
     if (existe) {
       await regSelCliente(existe.id);
       toast(`⚠️ Ya existe ${existe.nombre} con ese teléfono — cargamos su ficha`, 'info');
@@ -1325,6 +1325,163 @@ async function procesarCSV() {
 
 // ═══════════════════════════════════════════════════════════════
 //  VIEW: CIERRE DE CAJA
+// ═══════════════════════════════════════════════════════════════
+//  VIEW: CAJA DEL DÍA (empleado y dueño)
+// ═══════════════════════════════════════════════════════════════
+async function renderCaja() {
+  const el  = $('#view-caja');
+  const user = auth.get();
+  const hoy  = todayISO();
+
+  const [lavados, empleados] = await Promise.all([dbGetAll('lavados'), dbGetAll('empleados')]);
+
+  // Lavados del día ya terminados (estado listo)
+  const listosDia = lavados.filter(l => {
+    const mismodia = (l.fechaInicio || '').startsWith(hoy) || (l.fechaFin || '').startsWith(hoy);
+    const esMio    = user.rol === 'dueno' ? true : l.empleadoId === user.id;
+    return mismodia && l.estado === 'listo' && esMio;
+  });
+
+  // Stats globales del dueño (todos los días)
+  const semanaInicio = (() => {
+    const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); return d.toISOString().slice(0,10);
+  })();
+  const mesInicio = hoy.slice(0,7); // YYYY-MM
+
+  // Filtros de período (solo dueño)
+  const isDueno = user.rol === 'dueno';
+
+  // Calcular totales del día
+  const totalDia     = listosDia.reduce((s, l) => s + (l.precio || 0), 0);
+  const comDia       = listosDia.reduce((s, l) => s + (l.comisionMonto || 0), 0);
+  const ganancaDueno = totalDia - comDia;
+
+  // Resumen por período (solo dueño)
+  let resumenHTML = '';
+  if (isDueno) {
+    const semana = lavados.filter(l => l.estado === 'listo' && (l.fechaInicio||'').slice(0,10) >= semanaInicio);
+    const mes    = lavados.filter(l => l.estado === 'listo' && (l.fechaInicio||'').slice(0,7) === mesInicio);
+
+    const totalSem = semana.reduce((s,l)=>s+(l.precio||0),0);
+    const comSem   = semana.reduce((s,l)=>s+(l.comisionMonto||0),0);
+    const totalMes = mes.reduce((s,l)=>s+(l.precio||0),0);
+    const comMes   = mes.reduce((s,l)=>s+(l.comisionMonto||0),0);
+
+    // Comisiones por empleado del mes
+    const comPorEmp = {};
+    mes.forEach(l => {
+      if (!comPorEmp[l.empleadoId]) comPorEmp[l.empleadoId] = { nombre: l.empleadoNombre || '?', total: 0, lavados: 0 };
+      comPorEmp[l.empleadoId].total  += l.comisionMonto || 0;
+      comPorEmp[l.empleadoId].lavados++;
+    });
+
+    resumenHTML = `
+      <div class="section-head" style="margin-top:20px">📊 Resumen del período</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="card" style="text-align:center;padding:14px">
+          <div style="color:var(--muted);font-size:.72rem;margin-bottom:4px">📅 ESTA SEMANA</div>
+          <div style="color:var(--gold);font-weight:700;font-size:1.1rem">${fmoney(totalSem - comSem)}</div>
+          <div style="color:var(--muted);font-size:.7rem">ganancia neta</div>
+          <div style="color:var(--text);font-size:.78rem;margin-top:4px">${semana.length} lavados · ${fmoney(comSem)} comis.</div>
+        </div>
+        <div class="card" style="text-align:center;padding:14px">
+          <div style="color:var(--muted);font-size:.72rem;margin-bottom:4px">📆 ESTE MES</div>
+          <div style="color:var(--gold);font-weight:700;font-size:1.1rem">${fmoney(totalMes - comMes)}</div>
+          <div style="color:var(--muted);font-size:.7rem">ganancia neta</div>
+          <div style="color:var(--text);font-size:.78rem;margin-top:4px">${mes.length} lavados · ${fmoney(comMes)} comis.</div>
+        </div>
+      </div>
+      ${Object.keys(comPorEmp).length ? `
+      <div class="section-head">👥 Comisiones del mes por empleado</div>
+      ${Object.values(comPorEmp).map(e => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #1e1e1e">
+          <div>
+            <div style="font-weight:600">${e.nombre}</div>
+            <div style="color:var(--muted);font-size:.78rem">${e.lavados} lavado${e.lavados!==1?'s':''} terminados</div>
+          </div>
+          <div style="color:var(--gold);font-weight:700">${fmoney(e.total)}</div>
+        </div>`).join('')}` : ''}
+    `;
+  }
+
+  el.innerHTML = `
+    <p class="view-title">${isDueno ? '💰 Caja & Reportes' : '💵 Mi Caja del día'}</p>
+    <p class="view-sub">${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</p>
+
+    <!-- KPIs del día -->
+    <div class="section-head">Hoy — ${listosDia.length} vehículo${listosDia.length!==1?'s':''} terminado${listosDia.length!==1?'s':''}</div>
+    <div style="display:grid;grid-template-columns:${isDueno?'repeat(3,1fr)':'1fr 1fr'};gap:10px;margin-bottom:16px">
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">💵 COBRADO</div>
+        <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(totalDia)}</div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">${isDueno?'🤝 COMISIONES':'💸 MI COMISIÓN'}</div>
+        <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(comDia)}</div>
+      </div>
+      ${isDueno ? `<div class="card" style="text-align:center;padding:14px">
+        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">✅ GANANCIA NETA</div>
+        <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(ganancaDueno)}</div>
+      </div>` : `<div></div>`}
+    </div>
+
+    <!-- Desglose por vehículo -->
+    <div class="section-head">Desglose de hoy</div>
+    ${listosDia.length === 0
+      ? `<div style="text-align:center;padding:32px;color:var(--muted)">
+          <div style="font-size:2rem">📋</div>
+          <p style="margin-top:8px">Todavía no hay vehículos terminados hoy</p>
+        </div>`
+      : listosDia.map((l, i) => {
+          const icon = l.tipoVehiculo === '4x4' ? '🚙' : l.tipoVehiculo === 'camioneta' ? '🚐' : '🚗';
+          const hora = new Date(l.fechaFin || l.fechaInicio).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+          const empNombre = empleados.find(e=>e.id===l.empleadoId)?.nombre || '—';
+          return `
+          <div style="background:var(--surface2);border-radius:var(--r-md);padding:14px;margin-bottom:10px;border-left:3px solid var(--gold)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+              <div>
+                <span style="font-size:.85rem">${icon}</span>
+                <strong style="margin-left:4px">${l.clienteNombre}</strong>
+                ${l.patente && l.patente!=='—' ? `<span style="color:var(--muted);font-size:.78rem"> · ${l.patente}</span>` : ''}
+                ${l.modeloVehiculo ? `<div style="color:var(--muted);font-size:.75rem;margin-top:1px">${l.modeloVehiculo}</div>` : ''}
+              </div>
+              <div style="color:var(--gold);font-weight:700;font-size:1rem">${fmoney(l.precio)}</div>
+            </div>
+            <div style="color:var(--muted);font-size:.78rem;display:flex;gap:12px;flex-wrap:wrap">
+              <span>🧹 ${l.servicioNombre}</span>
+              ${isDueno ? `<span>👤 ${empNombre}</span>` : ''}
+              <span>🕐 ${hora}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid #1e1e1e">
+              <span style="color:var(--muted);font-size:.78rem">Comisión (${l.comisionPct}%)</span>
+              <span style="color:var(--success);font-size:.85rem;font-weight:600">+ ${fmoney(l.comisionMonto)}</span>
+            </div>
+          </div>`;
+        }).join('')
+    }
+
+    <!-- Total final -->
+    ${listosDia.length > 0 ? `
+    <div style="background:rgba(201,162,39,.1);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:16px;margin-top:4px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="color:var(--muted)">Total cobrado hoy</span>
+        <span style="font-weight:700">${fmoney(totalDia)}</span>
+      </div>
+      ${isDueno ? `
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="color:var(--muted)">Comisiones empleados</span>
+        <span style="color:var(--danger)">- ${fmoney(comDia)}</span>
+      </div>` : ''}
+      <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--gold-dim)">
+        <span style="font-weight:700">${isDueno?'Ganancia neta dueño':'Mi comisión del día'}</span>
+        <span style="color:var(--gold);font-weight:700;font-size:1.1rem">${fmoney(isDueno ? ganancaDueno : comDia)}</span>
+      </div>
+    </div>` : ''}
+
+    ${resumenHTML}
+  `;
+}
+
 // ═══════════════════════════════════════════════════════════════
 async function renderCierre() {
   const el=$('#view-cierre');
