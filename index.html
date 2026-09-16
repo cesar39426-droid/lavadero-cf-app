@@ -1016,7 +1016,7 @@ async function regConfirmar() {
     }
     cliente = await dbPut('clientes', {
       nombre, telefono: tel,
-      patentes: pat ? [pat] : [],
+      patentes: [],
       email: '', creadoEn: new Date().toISOString()
     });
   }
