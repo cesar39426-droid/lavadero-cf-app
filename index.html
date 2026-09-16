@@ -300,7 +300,7 @@ select.field:focus{outline:none;border-color:var(--gold)}
 <!-- TOASTS -->
 <div id="toast-container"></div>
 
-<script>
+<script type="module">
 // ═══════════════════════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════════════════════
@@ -388,76 +388,82 @@ function confirmModal(msg, onYes, yesLabel='Confirmar', yesClass='btn-danger') {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  DB (IndexedDB wrapper)
+//  DB (Firebase Firestore)
 // ═══════════════════════════════════════════════════════════════
-const DB_NAME = 'lavaderocf';
-const DB_VERSION = 1;
 let _db = null;
 
-function dbOpen() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      const stores = {
-        empleados: { idx: [] },
-        servicios:  { idx: [] },
-        clientes:   { idx: ['nombre'] },
-        lavados:    { idx: ['clienteId','estado','empleadoId'] },
-        turnos:     { idx: ['fecha','estado'] },
-        costos:     { idx: ['fecha'] },
-        config:     { keyPath: 'key', idx: [] }
-      };
-      for (const [name, cfg] of Object.entries(stores)) {
-        if (!db.objectStoreNames.contains(name)) {
-          const st = db.createObjectStore(name, { keyPath: cfg.keyPath || 'id' });
-          cfg.idx.forEach(i => st.createIndex(i, i, { unique: false }));
-        }
-      }
-    };
-    req.onsuccess = e => { _db = e.target.result; resolve(_db); };
-    req.onerror = e => reject(e.target.error);
-  });
+// Firebase config — proyecto LavaderoCF
+const FB_CONFIG = {
+  apiKey: "AIzaSyDSas8L9xCWGfTfC5itNweFPWbgm3oY3SE",
+  authDomain: "lavaderocf-a0d15.firebaseapp.com",
+  projectId: "lavaderocf-a0d15",
+  storageBucket: "lavaderocf-a0d15.firebasestorage.app",
+  messagingSenderId: "784469534329",
+  appId: "1:784469534329:web:33705f2f19ce980ff956a8"
+};
+
+let _fbApp = null;
+let _firestore = null;
+
+async function dbOpen() {
+  if (_firestore) return _firestore;
+  // Importar Firebase via CDN (compat mode para sintaxis sencilla)
+  const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+  const {
+    getFirestore, collection, doc,
+    getDoc, getDocs, setDoc, deleteDoc,
+    enableIndexedDbPersistence
+  } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+
+  if (!getApps().length) {
+    _fbApp = initializeApp(FB_CONFIG);
+  } else {
+    _fbApp = getApps()[0];
+  }
+  _firestore = getFirestore(_fbApp);
+
+  // Guardar helpers en el scope global para que las funciones de abajo los usen
+  window._fb = { collection, doc, getDoc, getDocs, setDoc, deleteDoc };
+
+  // Persistencia offline (si el cel pierde wifi, sigue funcionando y sync al reconectar)
+  try {
+    await enableIndexedDbPersistence(_firestore);
+  } catch(e) {
+    // Si ya estaba habilitada o no está soportada, ignorar silenciosamente
+  }
+  return _firestore;
 }
 
-function tx(store, mode='readonly') {
-  if (!_db) throw new Error('DB no lista');
-  const t = _db.transaction(store, mode);
-  return t.objectStore(store);
+async function dbGet(store, key) {
+  const db = await dbOpen();
+  const { doc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, store, String(key)));
+  return snap.exists() ? { ...snap.data(), id: snap.id } : undefined;
 }
 
-function dbGet(store, key) {
-  return new Promise((res,rej) => {
-    const r = tx(store).get(key);
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
+async function dbGetAll(store) {
+  const db = await dbOpen();
+  const { collection, getDocs } = window._fb;
+  const snap = await getDocs(collection(db, store));
+  return snap.docs.map(d => ({ ...d.data(), id: d.id }));
 }
-function dbGetAll(store) {
-  return new Promise((res,rej) => {
-    const r = tx(store).getAll();
-    r.onsuccess = () => res(r.result||[]);
-    r.onerror = () => rej(r.error);
-  });
+
+async function dbPut(store, rec) {
+  const db = await dbOpen();
+  const { doc, setDoc } = window._fb;
+  // Si no tiene ID, generamos uno
+  if (!rec.id && store !== 'config') rec = { ...rec, id: uuid() };
+  const id = store === 'config' ? rec.key : rec.id;
+  await setDoc(doc(db, store, String(id)), rec);
+  return rec;
 }
-function dbPut(store, rec) {
-  if (!rec.id && store !== 'config') rec = {...rec, id: uuid()};
-  return new Promise((res,rej) => {
-    const t = _db.transaction(store, 'readwrite');
-    const st = t.objectStore(store);
-    st.put(rec);
-    t.oncomplete = () => res(rec);
-    t.onerror = () => rej(t.error);
-  });
+
+async function dbDelete(store, key) {
+  const db = await dbOpen();
+  const { doc, deleteDoc } = window._fb;
+  await deleteDoc(doc(db, store, String(key)));
 }
-function dbDelete(store, key) {
-  return new Promise((res,rej) => {
-    const t = _db.transaction(store, 'readwrite');
-    t.objectStore(store).delete(key);
-    t.oncomplete = () => res();
-    t.onerror = () => rej(t.error);
-  });
-}
+
 async function dbCfg(key, val) {
   if (val === undefined) {
     const r = await dbGet('config', key);
@@ -465,21 +471,24 @@ async function dbCfg(key, val) {
   }
   return dbPut('config', { key, value: val });
 }
+
 async function dbExport() {
   const stores = ['empleados','servicios','clientes','lavados','turnos','costos','config'];
   const out = {};
   for (const s of stores) out[s] = await dbGetAll(s);
   return out;
 }
+
 async function dbImport(data) {
   const stores = ['empleados','servicios','clientes','lavados','turnos','costos','config'];
+  const db = await dbOpen();
+  const { collection, getDocs, doc, deleteDoc, setDoc } = window._fb;
   for (const s of stores) {
     if (!data[s]) continue;
-    await new Promise((res,rej) => {
-      const t = _db.transaction(s, 'readwrite');
-      t.objectStore(s).clear();
-      t.oncomplete = res; t.onerror = rej;
-    });
+    // Borrar todos los documentos existentes
+    const snap = await getDocs(collection(db, s));
+    await Promise.all(snap.docs.map(d => deleteDoc(doc(db, s, d.id))));
+    // Insertar los nuevos
     for (const rec of data[s]) await dbPut(s, rec);
   }
 }
