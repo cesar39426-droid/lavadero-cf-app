@@ -575,7 +575,7 @@ function buildNav(user) {
     <div class="view" id="view-registro"></div>
     <div class="view" id="view-dia"></div>
     <div class="view" id="view-clientes"></div>
-    <div class="view" id="view-caja"></div>
+    <div class="view" id="view-finanzas"></div>
     <div class="view" id="view-cierre"></div>
     <div class="view" id="view-costos"></div>
     <div class="view" id="view-empleados"></div>
@@ -597,7 +597,7 @@ function buildNav(user) {
         {id:'registro', label:'Registrar',icon:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'},
         {id:'dia',      label:'Hoy',icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'},
         {id:'clientes', label:'Clientes',icon:'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>'},
-        {id:'caja',     label:'Mi Caja',icon:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>'},
+        {id:'finanzas', label:'Finanzas',icon:'<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>'},
       ];
   nav.innerHTML = items.map(it=>`
     <button class="nav-item" data-view="${it.id}" onclick="navTo('${it.id}')">
@@ -618,7 +618,7 @@ async function renderView(id) {
     registro:  renderRegistro,
     dia:       renderDia,
     clientes:  renderClientes,
-    caja:      renderCaja,
+    finanzas:  renderCaja,
     cierre:    renderCierre,
     costos:    renderCostos,
     empleados: renderEmpleados,
@@ -1067,7 +1067,8 @@ async function regConfirmar() {
   });
 
   toast(`✔ ${cliente.nombre} — ${svc.nombre} (${fmoney(precioFinal)}) agregado a la cola`, 'success');
-  await renderRegistro();
+  // En lugar de volver a limpiar y quedarse en registro, avanzamos a la lista diaria
+  navTo('dia');
 }
 
 
@@ -1326,111 +1327,143 @@ async function procesarCSV() {
 // ═══════════════════════════════════════════════════════════════
 //  VIEW: CIERRE DE CAJA
 // ═══════════════════════════════════════════════════════════════
-//  VIEW: CAJA DEL DÍA (empleado y dueño)
+//  VIEW: FINANZAS / REPORTES (empleado y dueño)
 // ═══════════════════════════════════════════════════════════════
-async function renderCaja() {
-  const el  = $('#view-caja');
+async function renderFinanzas() {
+  const el  = $('#view-finanzas');
   const user = auth.get();
   const hoy  = todayISO();
 
   const [lavados, empleados] = await Promise.all([dbGetAll('lavados'), dbGetAll('empleados')]);
 
-  // Lavados del día ya terminados (estado listo)
-  const listosDia = lavados.filter(l => {
-    const mismodia = (l.fechaInicio || '').startsWith(hoy) || (l.fechaFin || '').startsWith(hoy);
-    const esMio    = user.rol === 'dueno' ? true : l.empleadoId === user.id;
-    return mismodia && l.estado === 'listo' && esMio;
+  // Filtros de período (solo dueño)
+  const isDueno = user.rol === 'dueno';
+
+  // Helper para sacar totales y comisiones de un arreglo de lavados
+  const getStats = (arr) => ({
+    total: arr.reduce((s, l) => s + (l.precio || 0), 0),
+    comision: arr.reduce((s, l) => s + (l.comisionMonto || 0), 0),
+    lavados: arr.length
   });
 
-  // Stats globales del dueño (todos los días)
+  // Fechas límite
   const semanaInicio = (() => {
     const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); return d.toISOString().slice(0,10);
   })();
   const mesInicio = hoy.slice(0,7); // YYYY-MM
 
-  // Filtros de período (solo dueño)
-  const isDueno = user.rol === 'dueno';
+  // Arreglos base para el usuario actual
+  const misLavados = lavados.filter(l => l.estado === 'listo' && (isDueno ? true : l.empleadoId === user.id));
 
-  // Calcular totales del día
-  const totalDia     = listosDia.reduce((s, l) => s + (l.precio || 0), 0);
-  const comDia       = listosDia.reduce((s, l) => s + (l.comisionMonto || 0), 0);
-  const ganancaDueno = totalDia - comDia;
+  const listosDia    = misLavados.filter(l => (l.fechaInicio || '').startsWith(hoy) || (l.fechaFin || '').startsWith(hoy));
+  const listosSemana = misLavados.filter(l => (l.fechaInicio||'').slice(0,10) >= semanaInicio);
+  const listosMes    = misLavados.filter(l => (l.fechaInicio||'').slice(0,7) === mesInicio);
 
-  // Resumen por período (solo dueño)
-  let resumenHTML = '';
+  const statDia = getStats(listosDia);
+  const statSem = getStats(listosSemana);
+  const statMes = getStats(listosMes);
+
+  // Resumen por período y empleado (solo dueño)
+  let resumenDueñoHTML = '';
   if (isDueno) {
-    const semana = lavados.filter(l => l.estado === 'listo' && (l.fechaInicio||'').slice(0,10) >= semanaInicio);
-    const mes    = lavados.filter(l => l.estado === 'listo' && (l.fechaInicio||'').slice(0,7) === mesInicio);
-
-    const totalSem = semana.reduce((s,l)=>s+(l.precio||0),0);
-    const comSem   = semana.reduce((s,l)=>s+(l.comisionMonto||0),0);
-    const totalMes = mes.reduce((s,l)=>s+(l.precio||0),0);
-    const comMes   = mes.reduce((s,l)=>s+(l.comisionMonto||0),0);
-
-    // Comisiones por empleado del mes
-    const comPorEmp = {};
-    mes.forEach(l => {
-      if (!comPorEmp[l.empleadoId]) comPorEmp[l.empleadoId] = { nombre: l.empleadoNombre || '?', total: 0, lavados: 0 };
-      comPorEmp[l.empleadoId].total  += l.comisionMonto || 0;
-      comPorEmp[l.empleadoId].lavados++;
+    const comPorEmpMes = {};
+    listosMes.forEach(l => {
+      if (!comPorEmpMes[l.empleadoId]) comPorEmpMes[l.empleadoId] = { nombre: empleados.find(e=>e.id===l.empleadoId)?.nombre || '?', total: 0, lavados: 0 };
+      comPorEmpMes[l.empleadoId].total  += l.comisionMonto || 0;
+      comPorEmpMes[l.empleadoId].lavados++;
     });
 
-    resumenHTML = `
-      <div class="section-head" style="margin-top:20px">📊 Resumen del período</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="card" style="text-align:center;padding:14px">
-          <div style="color:var(--muted);font-size:.72rem;margin-bottom:4px">📅 ESTA SEMANA</div>
-          <div style="color:var(--gold);font-weight:700;font-size:1.1rem">${fmoney(totalSem - comSem)}</div>
-          <div style="color:var(--muted);font-size:.7rem">ganancia neta</div>
-          <div style="color:var(--text);font-size:.78rem;margin-top:4px">${semana.length} lavados · ${fmoney(comSem)} comis.</div>
+    resumenDueñoHTML = `
+      <div class="section-head" style="margin-top:24px">📊 Métricas globales de ganancia neta</div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px">
+        <div class="card flex-between" style="padding:16px">
+          <div>
+            <div style="color:var(--muted);font-size:.78rem;margin-bottom:4px">📅 ESTA SEMANA</div>
+            <div style="color:var(--gold);font-weight:700;font-size:1.3rem">${fmoney(statSem.total - statSem.comision)}</div>
+            <div style="color:var(--text);font-size:.82rem;margin-top:4px">${statSem.lavados} lavados terminados</div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:var(--muted);font-size:.75rem">Ingreso Bruto: <span style="color:var(--text)">${fmoney(statSem.total)}</span></div>
+            <div style="color:var(--muted);font-size:.75rem">Comisiones: <span style="color:var(--danger)">- ${fmoney(statSem.comision)}</span></div>
+          </div>
         </div>
-        <div class="card" style="text-align:center;padding:14px">
-          <div style="color:var(--muted);font-size:.72rem;margin-bottom:4px">📆 ESTE MES</div>
-          <div style="color:var(--gold);font-weight:700;font-size:1.1rem">${fmoney(totalMes - comMes)}</div>
-          <div style="color:var(--muted);font-size:.7rem">ganancia neta</div>
-          <div style="color:var(--text);font-size:.78rem;margin-top:4px">${mes.length} lavados · ${fmoney(comMes)} comis.</div>
+        <div class="card flex-between" style="padding:16px">
+          <div>
+            <div style="color:var(--muted);font-size:.78rem;margin-bottom:4px">📆 ESTE MES</div>
+            <div style="color:var(--gold);font-weight:700;font-size:1.3rem">${fmoney(statMes.total - statMes.comision)}</div>
+            <div style="color:var(--text);font-size:.82rem;margin-top:4px">${statMes.lavados} lavados terminados</div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:var(--muted);font-size:.75rem">Ingreso Bruto: <span style="color:var(--text)">${fmoney(statMes.total)}</span></div>
+            <div style="color:var(--muted);font-size:.75rem">Comisiones: <span style="color:var(--danger)">- ${fmoney(statMes.comision)}</span></div>
+          </div>
         </div>
       </div>
-      ${Object.keys(comPorEmp).length ? `
-      <div class="section-head">👥 Comisiones del mes por empleado</div>
-      ${Object.values(comPorEmp).map(e => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #1e1e1e">
-          <div>
-            <div style="font-weight:600">${e.nombre}</div>
-            <div style="color:var(--muted);font-size:.78rem">${e.lavados} lavado${e.lavados!==1?'s':''} terminados</div>
-          </div>
-          <div style="color:var(--gold);font-weight:700">${fmoney(e.total)}</div>
-        </div>`).join('')}` : ''}
+      ${Object.keys(comPorEmpMes).length ? `
+      <div class="section-head">👥 Desglose de comisiones (Este mes)</div>
+      <div class="card" style="padding:0">
+        ${Object.values(comPorEmpMes).map((e, idx, arr) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:${idx===arr.length-1?'none':'1px solid #2a2a2a'}">
+            <div>
+              <div style="font-weight:600">${e.nombre}</div>
+              <div style="color:var(--muted);font-size:.82rem">${e.lavados} lavado${e.lavados!==1?'s':''} completados</div>
+            </div>
+            <div style="text-align:right">
+              <div style="color:var(--success);font-weight:700;font-size:1.1rem">${fmoney(e.total)}</div>
+              <div style="color:var(--muted);font-size:.75rem">a liquidar</div>
+            </div>
+          </div>`).join('')}
+      </div>` : ''}
+    `;
+  }
+
+  // Vista específica del empleado
+  let resumenEmpleadoHTML = '';
+  if (!isDueno) {
+    resumenEmpleadoHTML = `
+      <div class="section-head" style="margin-top:24px">📈 Mi acumulado del período</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="card" style="text-align:center;padding:16px">
+          <div style="color:var(--muted);font-size:.75rem;margin-bottom:6px">📅 ESTA SEMANA</div>
+          <div style="color:var(--success);font-weight:700;font-size:1.2rem">${fmoney(statSem.comision)}</div>
+          <div style="color:var(--text);font-size:.82rem;margin-top:4px">${statSem.lavados} lavados</div>
+        </div>
+        <div class="card" style="text-align:center;padding:16px">
+          <div style="color:var(--muted);font-size:.75rem;margin-bottom:6px">📆 ESTE MES</div>
+          <div style="color:var(--success);font-weight:700;font-size:1.2rem">${fmoney(statMes.comision)}</div>
+          <div style="color:var(--text);font-size:.82rem;margin-top:4px">${statMes.lavados} lavados</div>
+        </div>
+      </div>
     `;
   }
 
   el.innerHTML = `
-    <p class="view-title">${isDueno ? '💰 Caja & Reportes' : '💵 Mi Caja del día'}</p>
-    <p class="view-sub">${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</p>
+    <p class="view-title">${isDueno ? 'Finanzas y Reportes' : 'Mi Liquidación'}</p>
+    <p class="view-sub">Métricas automáticas de ingresos y comisiones</p>
 
-    <!-- KPIs del día -->
-    <div class="section-head">Hoy — ${listosDia.length} vehículo${listosDia.length!==1?'s':''} terminado${listosDia.length!==1?'s':''}</div>
+    <!-- KPIs de HOY -->
+    <div class="section-head" style="margin-top:16px">Hoy — ${new Date().toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'})}</div>
     <div style="display:grid;grid-template-columns:${isDueno?'repeat(3,1fr)':'1fr 1fr'};gap:10px;margin-bottom:16px">
       <div class="card" style="text-align:center;padding:14px">
-        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">💵 COBRADO</div>
-        <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(totalDia)}</div>
+        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">💵 INGRESOS HOY</div>
+        <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(statDia.total)}</div>
       </div>
       <div class="card" style="text-align:center;padding:14px">
-        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">${isDueno?'🤝 COMISIONES':'💸 MI COMISIÓN'}</div>
-        <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(comDia)}</div>
+        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">${isDueno?'🤝 COMISIONES HOY':'💸 MI COMISIÓN HOY'}</div>
+        <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(statDia.comision)}</div>
       </div>
       ${isDueno ? `<div class="card" style="text-align:center;padding:14px">
-        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">✅ GANANCIA NETA</div>
-        <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(ganancaDueno)}</div>
+        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">✅ NETA HOY</div>
+        <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(statDia.total - statDia.comision)}</div>
       </div>` : `<div></div>`}
     </div>
 
-    <!-- Desglose por vehículo -->
-    <div class="section-head">Desglose de hoy</div>
+    <!-- Desglose HOY por vehículo -->
+    <div class="section-head">Detalle de lavados (Hoy)</div>
     ${listosDia.length === 0
       ? `<div style="text-align:center;padding:32px;color:var(--muted)">
           <div style="font-size:2rem">📋</div>
-          <p style="margin-top:8px">Todavía no hay vehículos terminados hoy</p>
+          <p style="margin-top:8px">No hay ingresos registrados hoy</p>
         </div>`
       : listosDia.map((l, i) => {
           const icon = l.tipoVehiculo === '4x4' ? '🚙' : l.tipoVehiculo === 'camioneta' ? '🚐' : '🚗';
@@ -1443,7 +1476,6 @@ async function renderCaja() {
                 <span style="font-size:.85rem">${icon}</span>
                 <strong style="margin-left:4px">${l.clienteNombre}</strong>
                 ${l.patente && l.patente!=='—' ? `<span style="color:var(--muted);font-size:.78rem"> · ${l.patente}</span>` : ''}
-                ${l.modeloVehiculo ? `<div style="color:var(--muted);font-size:.75rem;margin-top:1px">${l.modeloVehiculo}</div>` : ''}
               </div>
               <div style="color:var(--gold);font-weight:700;font-size:1rem">${fmoney(l.precio)}</div>
             </div>
@@ -1460,25 +1492,7 @@ async function renderCaja() {
         }).join('')
     }
 
-    <!-- Total final -->
-    ${listosDia.length > 0 ? `
-    <div style="background:rgba(201,162,39,.1);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:16px;margin-top:4px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-        <span style="color:var(--muted)">Total cobrado hoy</span>
-        <span style="font-weight:700">${fmoney(totalDia)}</span>
-      </div>
-      ${isDueno ? `
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-        <span style="color:var(--muted)">Comisiones empleados</span>
-        <span style="color:var(--danger)">- ${fmoney(comDia)}</span>
-      </div>` : ''}
-      <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--gold-dim)">
-        <span style="font-weight:700">${isDueno?'Ganancia neta dueño':'Mi comisión del día'}</span>
-        <span style="color:var(--gold);font-weight:700;font-size:1.1rem">${fmoney(isDueno ? ganancaDueno : comDia)}</span>
-      </div>
-    </div>` : ''}
-
-    ${resumenHTML}
+    ${isDueno ? resumenDueñoHTML : resumenEmpleadoHTML}
   `;
 }
 
