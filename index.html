@@ -386,6 +386,9 @@ function confirmModal(msg, onYes, yesLabel='Confirmar', yesClass='btn-danger') {
   `);
   $('#confirmYes').onclick = () => { closeModal(); onYes(); };
 }
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.confirmModal = confirmModal;
 
 // ═══════════════════════════════════════════════════════════════
 //  DB (Firebase Firestore)
@@ -853,7 +856,7 @@ async function renderRegistro() {
     <div class="input-group"><textarea class="input" id="regNotas" rows="2" maxlength="200" placeholder="Ej: quiere que laven primero las llantas..."></textarea></div>
 
     <!-- CONFIRMAR -->
-    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="regConfirmar()">🚗 Agregar a la cola de hoy</button>
+    <button class="btn btn-primary btn-full" id="btnRegConfirmar" style="margin-top:8px" onclick="regConfirmar()">🚗 Agregar a la cola de hoy</button>
     <p style="text-align:center;color:var(--muted);font-size:.75rem;margin-top:8px">El vehículo quedará en estado "En espera" en la cola del día</p>
   `;
 }
@@ -1011,7 +1014,9 @@ function selServicio(id) {
   });
 }
 
+let regSubmitting = false;
 async function regConfirmar() {
+  if (regSubmitting) return;
   const user = auth.get();
 
   // ── Validar cliente ──────────────────────────────────────────
@@ -1027,11 +1032,6 @@ async function regConfirmar() {
       toast(`⚠️ Ya existe ${existe.nombre} con ese teléfono — cargamos su ficha`, 'info');
       return;
     }
-    cliente = await dbPut('clientes', {
-      nombre, telefono: tel,
-      patentes: [],
-      email: '', creadoEn: new Date().toISOString()
-    });
   }
 
   // ── Validar servicio ─────────────────────────────────────────
@@ -1043,46 +1043,90 @@ async function regConfirmar() {
     : user.id;
   if (!empId) { toast('Seleccioná un empleado', 'error'); return; }
 
-  // ── Datos del vehículo (del formulario del paso 3) ───────────
-  const modeloVehiculo  = $('#regModelo')?.value.trim() || '';
-  const patenteVehiculo = ($('#regPatenteVehiculo')?.value.trim() || '').toUpperCase();
-  // Agregar patente a la ficha del cliente si es nueva
-  if (patenteVehiculo && !(cliente.patentes || []).includes(patenteVehiculo)) {
-    const patentes = [...(cliente.patentes || []), patenteVehiculo];
-    cliente = await dbPut('clientes', { ...cliente, patentes });
+  // Bloquear botón para evitar doble clic mientras envía a la nube
+  regSubmitting = true;
+  const btn = $('#btnRegConfirmar');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Agregando a la cola...';
   }
 
-  // ── Calcular precio según vehículo ───────────────────────────
-  const svcs = await dbGetAll('servicios');
-  const svc  = svcs.find(s => s.id === regServicio);
-  if (!svc) { toast('Servicio no encontrado', 'error'); return; }
-  const precioFinal = getPrecioSegunVehiculo(svc, regVehiculo);
-  const comMonto    = Math.round((precioFinal * (svc.comisionPct || 0)) / 100);
+  try {
+    if (!cliente) {
+      const nombre = $('#regNombre')?.value.trim();
+      const tel    = $('#regTel')?.value.trim();
+      cliente = await dbPut('clientes', {
+        nombre, telefono: tel,
+        patentes: [],
+        email: '', creadoEn: new Date().toISOString()
+      });
+    }
 
-  await dbPut('lavados', {
-    clienteId:        cliente.id,
-    clienteNombre:    cliente.nombre,
-    clienteTelefono:  cliente.telefono,
-    patente:          patenteVehiculo || (cliente.patentes || [])[0] || '—',
-    modeloVehiculo:   modeloVehiculo,
-    tipoVehiculo:     regVehiculo,
-    servicioId:       regServicio,
-    servicioNombre:   svc.nombre,
-    empleadoId:       empId,
-    estado:           'en_espera',
-    fechaInicio:      new Date().toISOString(),
-    fechaFin:         null,
-    precio:           precioFinal,
-    comisionPct:      svc.comisionPct || 0,
-    comisionMonto:    comMonto,
-    notas:            $('#regNotas')?.value || '',
-    origen:           'mostrador'
-  });
+    // ── Prevenir duplicado accidental en los últimos 20 segundos ──
+    const todosLavados = await dbGetAll('lavados');
+    const duplicadoReciente = todosLavados.find(l => 
+      l.clienteId === cliente.id &&
+      l.servicioId === regServicio &&
+      l.estado === 'en_espera' &&
+      l.fechaInicio &&
+      (Date.now() - new Date(l.fechaInicio).getTime()) < 20000
+    );
+    if (duplicadoReciente) {
+      toast('⚠️ Este vehículo ya se agregó a la cola hace instantes', 'warning');
+      await navTo('dia');
+      return;
+    }
 
-  toast(`✔ ${cliente.nombre} — ${svc.nombre} (${fmoney(precioFinal)}) agregado a la cola`, 'success');
-  // En lugar de volver a limpiar y quedarse en registro, avanzamos a la lista diaria
-  navTo('dia');
+    // ── Datos del vehículo (del formulario del paso 3) ───────────
+    const modeloVehiculo  = $('#regModelo')?.value.trim() || '';
+    const patenteVehiculo = ($('#regPatenteVehiculo')?.value.trim() || '').toUpperCase();
+    // Agregar patente a la ficha del cliente si es nueva
+    if (patenteVehiculo && !(cliente.patentes || []).includes(patenteVehiculo)) {
+      const patentes = [...(cliente.patentes || []), patenteVehiculo];
+      cliente = await dbPut('clientes', { ...cliente, patentes });
+    }
+
+    // ── Calcular precio según vehículo ───────────────────────────
+    const svcs = await dbGetAll('servicios');
+    const svc  = svcs.find(s => s.id === regServicio);
+    if (!svc) { toast('Servicio no encontrado', 'error'); return; }
+    const precioFinal = getPrecioSegunVehiculo(svc, regVehiculo);
+    const comMonto    = Math.round((precioFinal * (svc.comisionPct || 0)) / 100);
+
+    await dbPut('lavados', {
+      clienteId:        cliente.id,
+      clienteNombre:    cliente.nombre,
+      clienteTelefono:  cliente.telefono,
+      patente:          patenteVehiculo || (cliente.patentes || [])[0] || '—',
+      modeloVehiculo:   modeloVehiculo,
+      tipoVehiculo:     regVehiculo,
+      servicioId:       regServicio,
+      servicioNombre:   svc.nombre,
+      empleadoId:       empId,
+      estado:           'en_espera',
+      fechaInicio:      new Date().toISOString(),
+      fechaFin:         null,
+      precio:           precioFinal,
+      comisionPct:      svc.comisionPct || 0,
+      comisionMonto:    comMonto,
+      notas:            $('#regNotas')?.value || '',
+      origen:           'mostrador'
+    });
+
+    toast(`✔ ${cliente.nombre} — ${svc.nombre} (${fmoney(precioFinal)}) agregado a la cola`, 'success');
+    await navTo('dia');
+  } catch (err) {
+    console.error('Error al registrar lavado:', err);
+    toast('Error de conexión al guardar. Reintentá.', 'error');
+  } finally {
+    regSubmitting = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🚗 Agregar a la cola de hoy';
+    }
+  }
 }
+window.regConfirmar = regConfirmar;
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -1137,7 +1181,7 @@ async function renderDia() {
         <div class="flex-between mt-sm">
           <span class="timer" id="timer-${l.id}">${l.estado==='en_proceso'?elapsedStr(l.fechaInicio):l.estado==='listo'?ftime(l.fechaFin)||'—':''}</span>
           <div class="flex-gap">
-            ${user.rol==='dueno'&&l.estado!=='listo'?`<button class="btn btn-danger btn-sm" onclick="diaEliminar('${l.id}')">Eliminar</button>`:''}
+            ${(user.rol==='dueno' || l.estado==='en_espera') ? `<button class="btn btn-danger btn-sm" onclick="diaEliminar('${l.id}')">✕ Quitar</button>` : ''}
             ${accionBtn(l)}
           </div>
         </div>
@@ -1187,13 +1231,24 @@ async function diaOpenWA(id) {
   window.open(`https://wa.me/${tel}?text=${msg}`, '_blank');
 }
 async function diaEliminar(id) {
-  confirmModal('¿Eliminar este vehículo de la cola?', async ()=>{
-    await dbDelete('lavados', id);
-    toast('Eliminado','info');
-    await renderDia();
-  });
+  confirmModal('¿Eliminar este vehículo de la lista de hoy?', async ()=>{
+    try {
+      await dbDelete('lavados', id);
+      toast('Vehículo eliminado de la lista','info');
+      await renderDia();
+    } catch(e) {
+      console.error(e);
+      toast('Error al eliminar','error');
+    }
+  }, 'Eliminar', 'btn-danger');
 }
 function diaWhatsapp(id) { diaOpenWA(id); }
+
+window.diaIniciar = diaIniciar;
+window.diaTerminar = diaTerminar;
+window.diaOpenWA = diaOpenWA;
+window.diaEliminar = diaEliminar;
+window.diaWhatsapp = diaWhatsapp;
 
 // ═══════════════════════════════════════════════════════════════
 //  VIEW: CLIENTES
