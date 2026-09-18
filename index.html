@@ -634,6 +634,7 @@ async function navTo(id) {
     await renderView(id);
   } catch(e) {
     console.error('Error in navTo:', e);
+    toast('Error al cargar la vista', 'error');
   } finally {
     if (pc) {
       pc.classList.remove('fade-out');
