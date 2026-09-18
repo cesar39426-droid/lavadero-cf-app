@@ -629,10 +629,15 @@ async function navTo(id) {
     pc.classList.add('fade-out');
     await new Promise(r => setTimeout(r, 150));
   }
-  showView(id);
-  await renderView(id);
-  if (pc) {
-    pc.classList.remove('fade-out');
+  try {
+    showView(id);
+    await renderView(id);
+  } catch(e) {
+    console.error('Error in navTo:', e);
+  } finally {
+    if (pc) {
+      pc.classList.remove('fade-out');
+    }
   }
 }
 
