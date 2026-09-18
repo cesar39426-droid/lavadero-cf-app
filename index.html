@@ -542,9 +542,9 @@ async function seeds() {
 //  AUTH / SESSION
 // ═══════════════════════════════════════════════════════════════
 const auth = {
-  set(user) { sessionStorage.setItem('lcf_user', JSON.stringify(user)); },
-  get()     { try { return JSON.parse(sessionStorage.getItem('lcf_user')); } catch(e){return null;} },
-  clear()   { sessionStorage.removeItem('lcf_user'); },
+  set(user) { localStorage.setItem('lcf_user', JSON.stringify(user)); },
+  get()     { try { return JSON.parse(localStorage.getItem('lcf_user')); } catch(e){return null;} },
+  clear()   { localStorage.removeItem('lcf_user'); },
   isDueno() { const u=this.get(); return u && u.rol==='dueno'; }
 };
 
@@ -713,7 +713,7 @@ async function renderDashboard() {
   const [lavados, clientes, costos] = await Promise.all([
     dbGetAll('lavados'), dbGetAll('clientes'), dbGetAll('costos')
   ]);
-  const hoy = lavados.filter(l => l.fechaInicio && l.fechaInicio.startsWith(today) && l.estado==='listo');
+  const hoy = lavados.filter(l => l.fechaInicio && l.fechaInicio.startsWith(today) && ['listo','archivado'].includes(l.estado));
   const ingHoy = hoy.reduce((s,l)=>s+(l.precio||0), 0);
   const comHoy = hoy.reduce((s,l)=>s+(l.comisionMonto||0), 0);
   const pendRecords = clientes.filter(c => {
@@ -895,7 +895,7 @@ async function regSelCliente(id) {
   regCliente = todos.find(c => c.id === id);
   if (!regCliente) return;
   const [lavados] = await Promise.all([dbGetAll('lavados')]);
-  const historial = lavados.filter(l => l.clienteId === id && l.estado === 'listo');
+  const historial = lavados.filter(l => l.clienteId === id && ['listo','archivado'].includes(l.estado));
   $('#regSuggs').style.display = 'none';
   $('#regSearch').value = '';
   $('#regNuevoCliente').style.display = 'none';
@@ -1091,7 +1091,21 @@ async function regConfirmar() {
     const svc  = svcs.find(s => s.id === regServicio);
     if (!svc) { toast('Servicio no encontrado', 'error'); return; }
     const precioFinal = getPrecioSegunVehiculo(svc, regVehiculo);
-    const comMonto    = Math.round((precioFinal * (svc.comisionPct || 0)) / 100);
+
+    // ── Calcular comisiones para TODOS los empleados activos ─────
+    const todosEmpleados = await dbGetAll('empleados');
+    // Filtrar solo empleados activos (excluye al dueño para que no cobre comisión sobre sí mismo, a menos que quieras que el dueño también tenga % asignado)
+    const empleadosActivos = todosEmpleados.filter(e => e.activo && e.rol !== 'dueno');
+    const comisionesGrupal = empleadosActivos.map(e => {
+      const pct = e.comisionPct ?? 15; // 15% por defecto si no tiene
+      return {
+        empleadoId: e.id,
+        nombre: e.nombre,
+        pct: pct,
+        monto: Math.round((precioFinal * pct) / 100)
+      };
+    });
+    const totalComisionMonto = comisionesGrupal.reduce((acc, c) => acc + c.monto, 0);
 
     await dbPut('lavados', {
       clienteId:        cliente.id,
@@ -1107,8 +1121,8 @@ async function regConfirmar() {
       fechaInicio:      new Date().toISOString(),
       fechaFin:         null,
       precio:           precioFinal,
-      comisionPct:      svc.comisionPct || 0,
-      comisionMonto:    comMonto,
+      comisionesGrupal: comisionesGrupal,
+      comisionMonto:    totalComisionMonto, // suma de todas las comisiones a pagar
       notas:            $('#regNotas')?.value || '',
       origen:           'mostrador'
     });
@@ -1163,11 +1177,12 @@ async function renderDia() {
     <div class="flex-gap mb-md" style="flex-wrap:wrap">
       <span class="chip chip-wait">En espera: ${hoy.filter(l=>l.estado==='en_espera').length}</span>
       <span class="chip chip-proc">En proceso: ${hoy.filter(l=>l.estado==='en_proceso').length}</span>
-      <span class="chip chip-done">Listos: ${hoy.filter(l=>l.estado==='listo').length}</span>
+      <span class="chip chip-done">✔ Listos hoy: ${hoy.filter(l=>['listo','archivado'].includes(l.estado)).length}</span>
     </div>
-    ${hoy.length===0?`<div class="empty"><span class="empty-icon">🚗</span><p>Ningún vehículo registrado hoy.</p><button class="btn btn-primary mt-sm" onclick="navTo('registro')">Registrar primer vehículo</button></div>`:''}
+    ${hoy.filter(l=>!['listo','archivado'].includes(l.estado)).length===0 && hoy.length===0?`<div class="empty"><span class="empty-icon">🚗</span><p>Ningún vehículo registrado hoy.</p><button class="btn btn-primary mt-sm" onclick="navTo('registro')">Registrar primer vehículo</button></div>`:''}
+    ${hoy.filter(l=>!['listo','archivado'].includes(l.estado)).length===0 && hoy.length>0?`<div class="empty"><span class="empty-icon">✅</span><p>${hoy.filter(l=>['listo','archivado'].includes(l.estado)).length} vehículo${hoy.filter(l=>['listo','archivado'].includes(l.estado)).length!==1?'s':''} listo${hoy.filter(l=>['listo','archivado'].includes(l.estado)).length!==1?'s':''} hoy.</p><p style="font-size:.82rem;color:var(--muted);margin-top:4px">Ver los detalles en Finanzas.</p><button class="btn btn-secondary mt-sm" onclick="navTo('registro')">+ Registrar otro</button></div>`:''}
     <div id="diaList">
-    ${hoy.map(l=>`
+    ${hoy.filter(l=>!['listo','archivado'].includes(l.estado)).map(l=>`
       <div class="card" id="dcard-${l.id}">
         <div class="flex-between mb-sm">
           <div>
@@ -1179,7 +1194,7 @@ async function renderDia() {
         <p class="text-muted" style="font-size:.82rem">${l.servicioNombre||'—'} · ${fmoney(l.precio)}</p>
         <p class="text-muted" style="font-size:.78rem">Empleado: ${l.empleadoId||'—'}</p>
         <div class="flex-between mt-sm">
-          <span class="timer" id="timer-${l.id}">${l.estado==='en_proceso'?elapsedStr(l.fechaInicio):l.estado==='listo'?ftime(l.fechaFin)||'—':''}</span>
+          <span class="timer" id="timer-${l.id}">${l.estado==='en_proceso'?elapsedStr(l.fechaInicio):''}</span>
           <div class="flex-gap">
             ${(user.rol==='dueno' || l.estado==='en_espera') ? `<button class="btn btn-danger btn-sm" onclick="diaEliminar('${l.id}')">✕ Quitar</button>` : ''}
             ${accionBtn(l)}
@@ -1320,7 +1335,7 @@ async function verCliente(id) {
           <span class="row-title">${l.servicioNombre||'—'}</span>
           <span class="row-sub">${fdateShort(l.fechaInicio)} · ${fmoney(l.precio)}</span>
         </div>
-        ${l.estado==='listo'?'<span class="chip chip-done">✔</span>':''}
+        ${['listo','archivado'].includes(l.estado)?'<span class="chip chip-done">✔</span>':''}
       </div>`).join('')}
     <div class="form-actions">
       <button class="btn btn-secondary btn-full" onclick="closeModal()">Cerrar</button>
@@ -1402,17 +1417,33 @@ async function renderFinanzas() {
   const user = auth.get();
   const hoy  = todayISO();
 
-  const [lavados, empleados] = await Promise.all([dbGetAll('lavados'), dbGetAll('empleados')]);
+  const [lavados, empleados, cierres] = await Promise.all([dbGetAll('lavados'), dbGetAll('empleados'), dbGetAll('cierres')]);
+  window._cierresCache = cierres;
 
   // Filtros de período (solo dueño)
   const isDueno = user.rol === 'dueno';
 
   // Helper para sacar totales y comisiones de un arreglo de lavados
-  const getStats = (arr) => ({
-    total: arr.reduce((s, l) => s + (l.precio || 0), 0),
-    comision: arr.reduce((s, l) => s + (l.comisionMonto || 0), 0),
-    lavados: arr.length
-  });
+  const getStats = (arr) => {
+    let total = 0;
+    let comision = 0;
+    arr.forEach(l => {
+      if (isDueno) {
+        total += l.precio || 0;
+        comision += l.comisionMonto || 0;
+      } else {
+        const miCom = (l.comisionesGrupal || []).find(c => c.empleadoId === user.id);
+        if (miCom) {
+           total += l.precio || 0;
+           comision += miCom.monto;
+        } else if (l.empleadoId === user.id) { // Fallback para los viejos
+           total += l.precio || 0;
+           comision += l.comisionMonto || 0;
+        }
+      }
+    });
+    return { total, comision, lavados: arr.length };
+  };
 
   // Fechas límite
   const semanaInicio = (() => {
@@ -1421,7 +1452,12 @@ async function renderFinanzas() {
   const mesInicio = hoy.slice(0,7); // YYYY-MM
 
   // Arreglos base para el usuario actual
-  const misLavados = lavados.filter(l => l.estado === 'listo' && (isDueno ? true : l.empleadoId === user.id));
+  const misLavados = lavados.filter(l => {
+    if (!['listo','archivado'].includes(l.estado)) return false;
+    if (isDueno) return true;
+    const esMioGrupal = (l.comisionesGrupal || []).some(c => c.empleadoId === user.id);
+    return esMioGrupal || l.empleadoId === user.id;
+  });
 
   const listosDia    = misLavados.filter(l => (l.fechaInicio || '').startsWith(hoy) || (l.fechaFin || '').startsWith(hoy));
   const listosSemana = misLavados.filter(l => (l.fechaInicio||'').slice(0,10) >= semanaInicio);
@@ -1436,9 +1472,17 @@ async function renderFinanzas() {
   if (isDueno) {
     const comPorEmpMes = {};
     listosMes.forEach(l => {
-      if (!comPorEmpMes[l.empleadoId]) comPorEmpMes[l.empleadoId] = { nombre: empleados.find(e=>e.id===l.empleadoId)?.nombre || '?', total: 0, lavados: 0 };
-      comPorEmpMes[l.empleadoId].total  += l.comisionMonto || 0;
-      comPorEmpMes[l.empleadoId].lavados++;
+      if (l.comisionesGrupal && l.comisionesGrupal.length > 0) {
+        l.comisionesGrupal.forEach(c => {
+           if (!comPorEmpMes[c.empleadoId]) comPorEmpMes[c.empleadoId] = { nombre: c.nombre, total: 0, lavados: 0 };
+           comPorEmpMes[c.empleadoId].total += c.monto;
+           comPorEmpMes[c.empleadoId].lavados++;
+        });
+      } else { // Fallback viejos registros
+         if (!comPorEmpMes[l.empleadoId]) comPorEmpMes[l.empleadoId] = { nombre: empleados.find(e=>e.id===l.empleadoId)?.nombre || '?', total: 0, lavados: 0 };
+         comPorEmpMes[l.empleadoId].total  += l.comisionMonto || 0;
+         comPorEmpMes[l.empleadoId].lavados++;
+      }
     });
 
     resumenDueñoHTML = `
@@ -1509,6 +1553,28 @@ async function renderFinanzas() {
     <p class="view-title">${isDueno ? 'Finanzas y Reportes' : 'Mi Liquidación'}</p>
     <p class="view-sub">Métricas automáticas de ingresos y comisiones</p>
 
+    ${(() => {
+      const cierres = window._cierresCache || [];
+      const cierreHoy = cierres.find(c => c.fecha === hoy && c.estado === 'cerrado');
+      if (!cierreHoy) return '';
+      
+      if (isDueno) {
+        return `<div class="card card-gold" style="margin-top:16px;text-align:center;padding:16px">
+          <p class="fw-bold" style="font-size:1.1rem">✅ Caja Cerrada</p>
+          <p style="color:var(--text);font-size:.85rem;margin-top:4px">Ganancia neta del día: <strong class="text-gold">${fmoney(cierreHoy.neto)}</strong></p>
+        </div>`;
+      } else {
+        const miLiquidacion = (cierreHoy.liquidacion || {})[user.id];
+        if (miLiquidacion) {
+          return `<div class="card" style="margin-top:16px;background:var(--success);color:#fff;text-align:center;padding:16px">
+            <p class="fw-bold" style="font-size:1.1rem">✅ Caja del Día Cerrada</p>
+            <p style="font-size:.9rem;margin-top:4px">Acreditado por hoy: <strong style="font-size:1.2rem;margin-left:6px">${fmoney(miLiquidacion.total)}</strong></p>
+          </div>`;
+        }
+        return '';
+      }
+    })()}
+
     <!-- KPIs de HOY -->
     <div class="section-head" style="margin-top:16px">Hoy — ${new Date().toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'})}</div>
     <div style="display:grid;grid-template-columns:${isDueno?'repeat(3,1fr)':'1fr 1fr'};gap:10px;margin-bottom:16px">
@@ -1552,9 +1618,28 @@ async function renderFinanzas() {
               ${isDueno ? `<span>👤 ${empNombre}</span>` : ''}
               <span>🕐 ${hora}</span>
             </div>
-            <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid #1e1e1e">
-              <span style="color:var(--muted);font-size:.78rem">Comisión (${l.comisionPct}%)</span>
-              <span style="color:var(--success);font-size:.85rem;font-weight:600">+ ${fmoney(l.comisionMonto)}</span>
+            <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e1e1e">
+              ${(() => {
+                if (isDueno) {
+                  if (l.comisionesGrupal && l.comisionesGrupal.length) {
+                    return l.comisionesGrupal.map(c =>
+                      `<div style="display:flex;justify-content:space-between">
+                        <span style="color:var(--muted);font-size:.75rem">💸 ${c.nombre} (${c.pct}%)</span>
+                        <span style="color:var(--danger);font-size:.82rem;font-weight:600">- ${fmoney(c.monto)}</span>
+                      </div>`
+                    ).join('');
+                  } else {
+                    return `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.78rem">Comisión (${l.comisionPct||0}%)</span><span style="color:var(--danger);font-size:.85rem;font-weight:600">- ${fmoney(l.comisionMonto||0)}</span></div>`;
+                  }
+                } else {
+                  const miCom = (l.comisionesGrupal||[]).find(c => c.empleadoId === user.id);
+                  if (miCom) {
+                    return `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.78rem">Mi Comisión (${miCom.pct}%)</span><span style="color:var(--success);font-size:.85rem;font-weight:600">+ ${fmoney(miCom.monto)}</span></div>`;
+                  } else {
+                    return `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.78rem">Comisión (${l.comisionPct||0}%)</span><span style="color:var(--success);font-size:.85rem;font-weight:600">+ ${fmoney(l.comisionMonto||0)}</span></div>`;
+                  }
+                }
+              })()}
             </div>
           </div>`;
         }).join('')
@@ -1565,61 +1650,278 @@ async function renderFinanzas() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  VIEW: CIERRE DE CAJA
+// ═══════════════════════════════════════════════════════════════
 async function renderCierre() {
-  const el=$('#view-cierre');
-  const hoy=todayISO();
-  el.innerHTML=`
-    <p class="view-title">Cierre de Caja</p>
-    <div class="input-group"><label class="input-label">Fecha</label><input class="input" type="date" id="cierreDate" value="${hoy}" onchange="loadCierre(this.value)"/></div>
+  const el = $('#view-cierre');
+  const hoy = todayISO();
+
+  // Verificar si ya hay un cierre para hoy
+  const cierres = await dbGetAll('cierres');
+  const cierreHoy = cierres.find(c => c.fecha === hoy && c.estado === 'cerrado');
+
+  el.innerHTML = `
+    <p class="view-title">💰 Cierre de Caja</p>
+    <p class="view-sub">Liquidación diaria y archivo del día</p>
+
+    ${cierreHoy ? `
+      <div class="card card-gold" style="margin-bottom:16px;text-align:center;padding:20px">
+        <div style="font-size:2rem">✅</div>
+        <p class="fw-bold" style="margin-top:8px">Caja cerrada para hoy</p>
+        <p class="text-muted" style="font-size:.82rem">Cerrado a las ${new Date(cierreHoy.cerradoEn).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</p>
+      </div>
+    ` : ''}
+
     <div id="cierreContent"></div>
-  `;
-  await loadCierre(hoy);
-}
-async function loadCierre(fecha) {
-  const [lavados, empleados, costos] = await Promise.all([dbGetAll('lavados'),dbGetAll('empleados'),dbGetAll('costos')]);
-  const del = lavados.filter(l=>l.fechaInicio?.startsWith(fecha)&&l.estado==='listo');
-  const costosDia = costos.filter(c=>c.fecha===fecha);
-  const totalCostos = costosDia.reduce((s,c)=>s+(c.monto||0),0);
-  const bruto = del.reduce((s,l)=>s+(l.precio||0),0);
-  const comis = del.reduce((s,l)=>s+(l.comisionMonto||0),0);
-  const neto  = bruto - comis - totalCostos;
-  const byEmp = {};
-  del.forEach(l=>{
-    if(!byEmp[l.empleadoId]) byEmp[l.empleadoId]={nombre:'—',total:0,cant:0};
-    const emp=empleados.find(e=>e.id===l.empleadoId);
-    byEmp[l.empleadoId].nombre=emp?.nombre||l.empleadoId||'—';
-    byEmp[l.empleadoId].total+=(l.comisionMonto||0);
-    byEmp[l.empleadoId].cant++;
-  });
-  const ct=$('#cierreContent');
-  if(!ct) return;
-  ct.innerHTML=`
-    ${del.length===0?`<div class="empty"><span class="empty-icon">💰</span><p>No hay lavados finalizados para esta fecha.</p></div>`:`
-    <div class="card card-gold" style="margin-bottom:16px">
-      <div class="confirm-row"><span>Ingreso bruto</span><strong>${fmoney(bruto)}</strong></div>
-      <div class="confirm-row"><span>Comisiones</span><span class="text-danger">-${fmoney(comis)}</span></div>
-      <div class="confirm-row"><span>Costos del día</span><span class="text-danger">-${fmoney(totalCostos)}</span></div>
-      <div class="confirm-row"><span class="fw-bold text-gold font-serif">Ganancia neta</span><strong class="text-gold" style="font-size:1.1rem">${fmoney(neto)}</strong></div>
+
+    <div style="margin-top:32px">
+      <div class="section-head">📋 Historial de Cierres</div>
+      <div id="historialCierres"></div>
     </div>
-    <div class="section-head">Comisiones por empleado</div>
-    ${Object.values(byEmp).map(e=>`<div class="list-row"><div class="list-row-left"><span class="row-title">${e.nombre}</span><span class="row-sub">${e.cant} lavado${e.cant!==1?'s':''}</span></div><strong>${fmoney(e.total)}</strong></div>`).join('')}
-    <div class="section-head">Detalle de lavados</div>
-    ${del.map(l=>`<div class="list-row"><div class="list-row-left"><span class="row-title">${l.clienteNombre||'—'} · ${l.servicioNombre||'—'}</span><span class="row-sub">Comisión: ${fmoney(l.comisionMonto||0)}</span></div><strong>${fmoney(l.precio)}</strong></div>`).join('')}
-    <button class="btn btn-secondary btn-full mt-md" onclick="exportCierre()">📥 Exportar CSV</button>
-    `}
+  `;
+
+  await loadCierre(hoy);
+  await loadHistorialCierres();
+}
+
+async function loadCierre(fecha) {
+  const [lavados, empleados, costos, cierres] = await Promise.all([
+    dbGetAll('lavados'), dbGetAll('empleados'), dbGetAll('costos'), dbGetAll('cierres')
+  ]);
+
+  const cierreExistente = cierres.find(c => c.fecha === fecha && c.estado === 'cerrado');
+  // Solo lavados del día con estado 'listo' (no archivados — archivados no aparecen)
+  const del = lavados.filter(l => l.fechaInicio?.startsWith(fecha) && ['listo','archivado'].includes(l.estado));
+  const costosDia = costos.filter(c => c.fecha === fecha);
+  const totalCostos = costosDia.reduce((s, c) => s + (c.monto || 0), 0);
+  const bruto = del.reduce((s, l) => s + (l.precio || 0), 0);
+  const comis = del.reduce((s, l) => s + (l.comisionMonto || 0), 0);
+  const neto  = bruto - comis - totalCostos;
+
+  // Calcular liquidación por empleado usando comisionesGrupal
+  const byEmp = {};
+  del.forEach(l => {
+    if (l.comisionesGrupal && l.comisionesGrupal.length > 0) {
+      l.comisionesGrupal.forEach(c => {
+        if (!byEmp[c.empleadoId]) byEmp[c.empleadoId] = { nombre: c.nombre, total: 0, cant: 0 };
+        byEmp[c.empleadoId].total += c.monto;
+        byEmp[c.empleadoId].cant++;
+      });
+    } else { // Fallback para registros viejos
+      if (!byEmp[l.empleadoId]) byEmp[l.empleadoId] = { nombre: empleados.find(e => e.id === l.empleadoId)?.nombre || '—', total: 0, cant: 0 };
+      byEmp[l.empleadoId].total += l.comisionMonto || 0;
+      byEmp[l.empleadoId].cant++;
+    }
+  });
+
+  const ct = $('#cierreContent');
+  if (!ct) return;
+
+  const esHoy = fecha === todayISO();
+
+  if (cierreExistente) {
+    // Mostrar resumen del cierre ya realizado
+    const cr = cierreExistente;
+    ct.innerHTML = `
+      <div class="card card-gold" style="margin-bottom:16px">
+        <p class="fw-bold text-gold" style="margin-bottom:12px">📅 ${new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</p>
+        <div class="confirm-row"><span>Ingreso bruto</span><strong>${fmoney(cr.bruto)}</strong></div>
+        <div class="confirm-row"><span>Total comisiones</span><span class="text-danger">-${fmoney(cr.comisiones)}</span></div>
+        <div class="confirm-row"><span>Costos del día</span><span class="text-danger">-${fmoney(cr.costos)}</span></div>
+        <div class="confirm-row" style="border-top:1px solid var(--gold-dim);margin-top:8px;padding-top:8px">
+          <span class="fw-bold text-gold font-serif">Ganancia neta</span>
+          <strong class="text-gold" style="font-size:1.2rem">${fmoney(cr.neto)}</strong>
+        </div>
+      </div>
+      <div class="section-head">💸 Liquidación de empleados</div>
+      ${Object.values(cr.liquidacion||{}).map(e => `
+        <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:16px">
+          <div>
+            <p class="fw-bold">${e.nombre}</p>
+            <p class="text-muted" style="font-size:.78rem">${e.cant} lavado${e.cant!==1?'s':''} · Acreditado</p>
+          </div>
+          <strong class="text-gold" style="font-size:1.2rem">${fmoney(e.total)}</strong>
+        </div>`).join('')}
+      <button class="btn btn-secondary btn-full mt-md" onclick="exportCierre('${fecha}')">📥 Exportar CSV</button>
+    `;
+    return;
+  }
+
+  if (del.length === 0) {
+    ct.innerHTML = `<div class="empty"><span class="empty-icon">💰</span><p>No hay lavados finalizados${esHoy?' hoy':` el ${fecha}`}.</p></div>`;
+    return;
+  }
+
+  ct.innerHTML = `
+    <div class="card card-gold" style="margin-bottom:16px">
+      <p class="fw-bold text-gold" style="margin-bottom:12px">
+        📅 ${new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}
+        <span class="chip chip-wait" style="margin-left:8px;font-size:.72rem">Pendiente de cierre</span>
+      </p>
+      <div class="confirm-row"><span>Lavados terminados</span><strong>${del.length}</strong></div>
+      <div class="confirm-row"><span>Ingreso bruto</span><strong>${fmoney(bruto)}</strong></div>
+      <div class="confirm-row"><span>Total comisiones</span><span class="text-danger">-${fmoney(comis)}</span></div>
+      ${totalCostos > 0 ? `<div class="confirm-row"><span>Costos del día</span><span class="text-danger">-${fmoney(totalCostos)}</span></div>` : ''}
+      <div class="confirm-row" style="border-top:1px solid var(--gold-dim);margin-top:8px;padding-top:8px">
+        <span class="fw-bold text-gold font-serif">Ganancia neta</span>
+        <strong class="text-gold" style="font-size:1.2rem">${fmoney(neto)}</strong>
+      </div>
+    </div>
+
+    <div class="section-head">💸 A liquidar a cada empleado</div>
+    ${Object.values(byEmp).map(e => `
+      <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:16px;margin-bottom:10px">
+        <div>
+          <p class="fw-bold">${e.nombre}</p>
+          <p class="text-muted" style="font-size:.78rem">${e.cant} lavado${e.cant!==1?'s':''}</p>
+        </div>
+        <div style="text-align:right">
+          <strong style="color:var(--success);font-size:1.3rem">${fmoney(e.total)}</strong>
+          <p class="text-muted" style="font-size:.72rem">a pagar</p>
+        </div>
+      </div>`).join('')}
+
+    <div class="section-head">🧾 Detalle de lavados del día</div>
+    ${del.map(l => `
+      <div class="list-row">
+        <div class="list-row-left">
+          <span class="row-title">${l.clienteNombre||'—'} · ${l.patente||''}</span>
+          <span class="row-sub">${l.servicioNombre||'—'}</span>
+        </div>
+        <strong>${fmoney(l.precio)}</strong>
+      </div>`).join('')}
+
+    ${esHoy ? `
+      <div style="margin-top:24px">
+        <button class="btn btn-primary btn-full" style="font-size:1rem;padding:18px;background:var(--gold);color:#000" onclick="ejecutarCierreCaja()">
+          🔒 Cerrar Caja del Día
+        </button>
+        <p class="text-muted" style="font-size:.75rem;text-align:center;margin-top:8px">
+          Los vehículos quedarán archivados. El panel del día se reinicia.
+        </p>
+      </div>
+    ` : ''}
+    <button class="btn btn-secondary btn-full mt-sm" onclick="exportCierre('${fecha}')">📥 Exportar CSV</button>
   `;
 }
-async function exportCierre() {
-  const fecha=$('#cierreDate').value||todayISO();
-  const lavados=await dbGetAll('lavados');
-  const del=lavados.filter(l=>l.fechaInicio?.startsWith(fecha)&&l.estado==='listo');
-  const rows=[['Cliente','Patente','Servicio','Empleado','Precio','Comision','Fecha']];
-  del.forEach(l=>rows.push([l.clienteNombre||'',l.patente||'',l.servicioNombre||'',l.empleadoId||'',l.precio||0,l.comisionMonto||0,l.fechaInicio?.slice(0,10)||'']));
-  const csv=rows.map(r=>r.join(',')).join('\n');
-  const a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
-  a.download=`cierre-${fecha}.csv`; a.click();
+
+async function loadHistorialCierres() {
+  const el = $('#historialCierres');
+  if (!el) return;
+  const cierres = await dbGetAll('cierres');
+  const ordenados = cierres.filter(c => c.estado === 'cerrado').sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 30);
+  if (ordenados.length === 0) {
+    el.innerHTML = `<div class="empty" style="padding:20px"><span class="empty-icon" style="font-size:1.5rem">📋</span><p style="font-size:.85rem">Sin cierres anteriores aún.</p></div>`;
+    return;
+  }
+  el.innerHTML = ordenados.map(c => `
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:14px;margin-bottom:8px">
+      <div>
+        <p class="fw-bold" style="font-size:.9rem">${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'})}</p>
+        <p class="text-muted" style="font-size:.75rem">${c.totalLavados} lavados · Neto: ${fmoney(c.neto)}</p>
+      </div>
+      <div style="text-align:right">
+        <strong class="text-gold">${fmoney(c.bruto)}</strong>
+        <p class="text-muted" style="font-size:.72rem">bruto</p>
+      </div>
+    </div>`).join('');
 }
+
+async function ejecutarCierreCaja() {
+  const hoy = todayISO();
+  const [lavados, empleados, costos] = await Promise.all([
+    dbGetAll('lavados'), dbGetAll('empleados'), dbGetAll('costos')
+  ]);
+
+  const del = lavados.filter(l => l.fechaInicio?.startsWith(hoy) && ['listo','archivado'].includes(l.estado));
+  if (del.length === 0) { toast('No hay lavados finalizados para cerrar', 'error'); return; }
+
+  const costosDia = costos.filter(c => c.fecha === hoy);
+  const totalCostos = costosDia.reduce((s, c) => s + (c.monto || 0), 0);
+  const bruto = del.reduce((s, l) => s + (l.precio || 0), 0);
+  const comis = del.reduce((s, l) => s + (l.comisionMonto || 0), 0);
+  const neto  = bruto - comis - totalCostos;
+
+  // Armar liquidación por empleado
+  const liquidacion = {};
+  del.forEach(l => {
+    if (l.comisionesGrupal && l.comisionesGrupal.length > 0) {
+      l.comisionesGrupal.forEach(c => {
+        if (!liquidacion[c.empleadoId]) liquidacion[c.empleadoId] = { nombre: c.nombre, total: 0, cant: 0 };
+        liquidacion[c.empleadoId].total += c.monto;
+        liquidacion[c.empleadoId].cant++;
+      });
+    } else {
+      if (!liquidacion[l.empleadoId]) liquidacion[l.empleadoId] = { nombre: empleados.find(e => e.id === l.empleadoId)?.nombre || '—', total: 0, cant: 0 };
+      liquidacion[l.empleadoId].total += l.comisionMonto || 0;
+      liquidacion[l.empleadoId].cant++;
+    }
+  });
+
+  const resumenLiquidacion = Object.entries(liquidacion).map(([_, v]) => `• ${v.nombre}: ${fmoney(v.total)}`).join('\n');
+
+  confirmModal(
+    `¿Confirmar cierre de caja del ${new Date(hoy+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'long'})}?\n\nTotal: ${fmoney(bruto)} | Neta: ${fmoney(neto)}\n\nLiquidar:\n${resumenLiquidacion}`,
+    async () => {
+      try {
+        // 1. Guardar documento de cierre en Firestore
+        await dbPut('cierres', {
+          fecha: hoy,
+          cerradoEn: new Date().toISOString(),
+          estado: 'cerrado',
+          totalLavados: del.length,
+          bruto,
+          comisiones: comis,
+          costos: totalCostos,
+          neto,
+          liquidacion,
+          lavadosIds: del.map(l => l.id),
+          snapshot: del.map(l => ({
+            cliente: l.clienteNombre, patente: l.patente,
+            servicio: l.servicioNombre, precio: l.precio,
+            comisionMonto: l.comisionMonto, comisionesGrupal: l.comisionesGrupal || []
+          }))
+        });
+
+        // 2. Archivar los lavados (cambian estado a 'archivado')
+        await Promise.all(del.map(l => dbPut('lavados', { ...l, estado: 'archivado' })));
+
+        toast('✅ Caja cerrada. Panel reiniciado.', 'success');
+        await renderCierre();
+        // Refrescar dashboard si está visible
+        const dash = $('#view-dashboard');
+        if (dash && dash.classList.contains('active')) await renderDashboard();
+      } catch(err) {
+        console.error(err);
+        toast('Error al cerrar caja', 'error');
+      }
+    },
+    'Confirmar Cierre', 'btn-primary'
+  );
+}
+
+async function exportCierre(fecha) {
+  fecha = fecha || todayISO();
+  const [lavados, cierres] = await Promise.all([dbGetAll('lavados'), dbGetAll('cierres')]);
+  // Si hay cierre formal, usar su snapshot; si no, los lavados directos
+  const cierre = cierres.find(c => c.fecha === fecha && c.estado === 'cerrado');
+  const rows = [['Cliente','Patente','Servicio','Precio','Comision Total','Fecha']];
+  if (cierre) {
+    (cierre.snapshot || []).forEach(l => rows.push([l.cliente||'',l.patente||'',l.servicio||'',l.precio||0,l.comisionMonto||0,fecha]));
+  } else {
+    lavados.filter(l => l.fechaInicio?.startsWith(fecha) && ['listo','archivado'].includes(l.estado))
+      .forEach(l => rows.push([l.clienteNombre||'',l.patente||'',l.servicioNombre||'',l.precio||0,l.comisionMonto||0,l.fechaInicio?.slice(0,10)||'']));
+  }
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv);
+  a.download = `cierre-${fecha}.csv`; a.click();
+}
+
+window.ejecutarCierreCaja = ejecutarCierreCaja;
+window.exportCierre = exportCierre;
+window.loadCierre = loadCierre;
+
 
 // ═══════════════════════════════════════════════════════════════
 //  VIEW: COSTOS
@@ -1676,17 +1978,31 @@ async function renderEmpleados() {
   el.innerHTML=`
     <div class="flex-between mb-md"><p class="view-title">Empleados</p><button class="btn btn-primary btn-sm" onclick="nuevoEmpleadoModal()">+ Agregar</button></div>
     ${emps.map(e=>{
-      const lc=lavados.filter(l=>l.empleadoId===e.id&&l.estado==='listo');
-      return `<div class="card ${!e.activo?'':''}">
+      // Calcular total ganado usando comisionesGrupal (nuevo) o comisionMonto (fallback)
+      const ganancias = lavados.filter(l=>['listo','archivado'].includes(l.estado)).reduce((acc, l)=>{
+        if (l.comisionesGrupal && l.comisionesGrupal.length) {
+          const miCom = l.comisionesGrupal.find(c=>c.empleadoId===e.id);
+          return acc + (miCom ? miCom.monto : 0);
+        } else if (l.empleadoId===e.id) {
+          return acc + (l.comisionMonto||0);
+        }
+        return acc;
+      }, 0);
+      const lavadosTotales = lavados.filter(l=>['listo','archivado'].includes(l.estado)).filter(l=>{
+        if (l.comisionesGrupal&&l.comisionesGrupal.length) return l.comisionesGrupal.some(c=>c.empleadoId===e.id);
+        return l.empleadoId===e.id;
+      }).length;
+      return `<div class="card ${!e.activo?'card-inactive':''}">
         <div class="flex-between">
           <div>
             <p class="fw-bold">${e.nombre} ${e.rol==='dueno'?'👑':''}</p>
-            <p class="text-muted" style="font-size:.78rem">${e.tipo} · ${lc.length} lavados · ${fmoney(lc.reduce((s,l)=>s+(l.comisionMonto||0),0))}</p>
+            <p class="text-muted" style="font-size:.78rem">${e.tipo||''} · ${lavadosTotales} lavados · ${fmoney(ganancias)}</p>
+            ${e.rol!=='dueno'?`<p class="text-muted" style="font-size:.75rem;margin-top:2px">Comisión: <strong class="text-gold">${e.comisionPct??15}%</strong> por lavado</p>`:''}
           </div>
           <span class="chip ${e.activo?'chip-done':'chip-wait'}">${e.activo?'Activo':'Inactivo'}</span>
         </div>
         ${e.rol!=='dueno'?`<div class="flex-gap mt-sm">
-          <button class="btn btn-sm btn-secondary" onclick="editarPinModal('${e.id}')">Cambiar PIN</button>
+          <button class="btn btn-sm btn-secondary" onclick="editarEmpleadoModal('${e.id}')">✏️ Editar</button>
           <button class="btn btn-sm ${e.activo?'btn-danger':'btn-secondary'}" onclick="${e.activo?`desactivarEmp('${e.id}')`:`activarEmp('${e.id}')`}">${e.activo?'Desactivar':'Reactivar'}</button>
         </div>`:''}
       </div>`;}).join('')}
@@ -1697,6 +2013,7 @@ function nuevoEmpleadoModal() {
     <div class="modal-title">+ Nuevo Empleado</div>
     <div class="input-group"><label class="input-label">Nombre *</label><input class="input" id="enNombre" placeholder="Carlos"/></div>
     <div class="input-group"><label class="input-label">Tipo</label><select class="input" id="enTipo"><option value="permanente">Permanente</option><option value="temporal">Temporal</option></select></div>
+    <div class="input-group"><label class="input-label">Comisión por lavado (%)</label><input class="input" id="enComision" type="number" value="15" min="0" max="100"/></div>
     <div class="input-group"><label class="input-label">PIN (4 dígitos) *</label><input class="input" id="enPin" type="tel" maxlength="4" placeholder="1234"/></div>
     <div class="form-actions">
       <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
@@ -1707,28 +2024,42 @@ function nuevoEmpleadoModal() {
 async function guardarEmpleado() {
   const nombre=$('#enNombre').value.trim();
   const pin=$('#enPin').value.trim();
+  const comisionPct=Number($('#enComision').value)||0;
   if(!nombre||pin.length!==4){toast('Nombre y PIN de 4 dígitos requeridos','error');return;}
-  await dbPut('empleados',{nombre,pin,rol:'empleado',tipo:$('#enTipo').value,activo:true});
+  await dbPut('empleados',{nombre,pin,comisionPct,rol:'empleado',tipo:$('#enTipo').value,activo:true});
   closeModal(); toast('Empleado creado ✔','success'); await renderEmpleados();
 }
-function editarPinModal(id) {
+async function editarEmpleadoModal(id) {
+  const emps=await dbGetAll('empleados');
+  const e=emps.find(x=>x.id===id); if(!e) return;
   openModal(`
-    <div class="modal-title">Cambiar PIN</div>
-    <div class="input-group"><label class="input-label">Nuevo PIN (4 dígitos)</label><input class="input" id="npPin" type="tel" maxlength="4" placeholder="5678"/></div>
+    <div class="modal-title">✏️ Editar Empleado</div>
+    <div class="input-group"><label class="input-label">Nombre</label><input class="input" id="epNombre" value="${e.nombre}"/></div>
+    <div class="input-group"><label class="input-label">Comisión (%)</label><input class="input" id="epComision" type="number" value="${e.comisionPct??15}" min="0" max="100"/></div>
+    <div class="input-group"><label class="input-label">Nuevo PIN (dejar vacío si no cambia)</label><input class="input" id="epPin" type="tel" maxlength="4" placeholder="1234"/></div>
     <div class="form-actions">
       <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary btn-full" onclick="guardarPin('${id}')">Guardar</button>
+      <button class="btn btn-primary btn-full" onclick="guardarEdicionEmp('${id}')">Guardar</button>
     </div>
   `);
 }
-async function guardarPin(id) {
-  const pin=$('#npPin').value.trim();
-  if(pin.length!==4){toast('PIN de 4 dígitos requerido','error');return;}
+async function guardarEdicionEmp(id) {
   const emps=await dbGetAll('empleados');
   const e=emps.find(x=>x.id===id); if(!e) return;
-  await dbPut('empleados',{...e,pin});
-  closeModal(); toast('PIN actualizado ✔','success'); await renderEmpleados();
+  const nombre=$('#epNombre').value.trim()||e.nombre;
+  let pin=$('#epPin').value.trim();
+  if(pin.length>0 && pin.length!==4){toast('PIN debe tener 4 dígitos','error');return;}
+  const comisionPct=Number($('#epComision').value)||0;
+  
+  await dbPut('empleados',{...e, nombre, comisionPct, pin: pin||e.pin});
+  closeModal(); toast('Empleado actualizado ✔','success'); await renderEmpleados();
 }
+window.nuevoEmpleadoModal = nuevoEmpleadoModal;
+window.editarEmpleadoModal = editarEmpleadoModal;
+window.guardarEmpleado = guardarEmpleado;
+window.guardarEdicionEmp = guardarEdicionEmp;
+window.desactivarEmp = desactivarEmp;
+window.activarEmp = activarEmp;
 async function desactivarEmp(id) {
   confirmModal('¿Desactivar este empleado? (Se conserva su historial)',async()=>{
     const emps=await dbGetAll('empleados');
@@ -1752,7 +2083,7 @@ async function renderServicios() {
   const svcs=await dbGetAll('servicios');
   el.innerHTML=`
     <p class="view-title">Servicios y Precios</p>
-    <p class="view-sub">Editá los precios y comisiones</p>
+    <p class="view-sub">Editá los precios base</p>
     ${svcs.map(s=>`
       <div class="card">
         <div class="flex-between mb-sm">
@@ -1760,7 +2091,6 @@ async function renderServicios() {
           <strong class="text-gold">${fmoney(s.precio)}</strong>
         </div>
         <p class="text-muted" style="font-size:.78rem">${s.descripcion||''}</p>
-        <p class="text-muted" style="font-size:.78rem;margin-top:4px">Comisión: ${s.comisionPct||0}%</p>
         <button class="btn btn-secondary btn-sm mt-sm" onclick="editarServicioModal('${s.id}')">✏️ Editar</button>
       </div>`).join('')}
   `;
@@ -1772,7 +2102,6 @@ async function editarServicioModal(id) {
     <div class="modal-title">✏️ Editar Servicio</div>
     <div class="input-group"><label class="input-label">Nombre</label><input class="input" id="esNombre" value="${s.nombre}"/></div>
     <div class="input-group"><label class="input-label">Precio ($)</label><input class="input" id="esPrecio" type="number" value="${s.precio}"/></div>
-    <div class="input-group"><label class="input-label">Comisión (%)</label><input class="input" id="esComision" type="number" value="${s.comisionPct||0}" min="0" max="100"/></div>
     <div class="input-group"><label class="input-label">Descripción</label><textarea class="input" id="esDesc" rows="2">${s.descripcion||''}</textarea></div>
     <div class="form-actions">
       <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
@@ -1786,11 +2115,12 @@ async function guardarServicio(id) {
   await dbPut('servicios',{...s,
     nombre:$('#esNombre').value.trim()||s.nombre,
     precio:Number($('#esPrecio').value)||s.precio,
-    comisionPct:Number($('#esComision').value)||0,
     descripcion:$('#esDesc').value.trim()
   });
   closeModal(); toast('Servicio actualizado ✔','success'); await renderServicios();
 }
+window.editarServicioModal = editarServicioModal;
+window.guardarServicio = guardarServicio;
 
 // ═══════════════════════════════════════════════════════════════
 //  VIEW: RECORDATORIOS
@@ -1799,7 +2129,7 @@ async function renderRecordatorios() {
   const el=$('#view-recordatorios');
   const [clientes, lavados]=await Promise.all([dbGetAll('clientes'),dbGetAll('lavados')]);
   const pendientes=clientes.map(c=>{
-    const lc=lavados.filter(l=>l.clienteId===c.id&&l.estado==='listo').sort((a,b)=>b.fechaInicio?.localeCompare(a.fechaInicio));
+    const lc=lavados.filter(l=>l.clienteId===c.id&&['listo','archivado'].includes(l.estado)).sort((a,b)=>b.fechaInicio?.localeCompare(a.fechaInicio));
     const ultimo=lc[0];
     const dias=ultimo?daysSince(ultimo.fechaInicio):null;
     return {...c, dias, ultimoServicio:ultimo?.servicioNombre};
@@ -1877,7 +2207,7 @@ function generarRecsLocales(lavados, clientes, costos, servicios) {
   if(lavadosHoy>=3) recs.push({icono:'⚡',titulo:'Cola larga hoy',descripcion:`Hay ${lavadosHoy} vehículos en espera. Considerá llamar a un refuerzo.`,prioridad:'alta'});
   if(!costos.some(c=>c.fecha===hoyStr)) recs.push({icono:'📋',titulo:'Registrá los costos del día',descripcion:'No cargaste ningún costo hoy. Mantener los costos actualizados mejora el cálculo de ganancia neta.',prioridad:'media'});
   const byServicio={};
-  ultimos30.filter(l=>l.estado==='listo').forEach(l=>{if(!byServicio[l.servicioId])byServicio[l.servicioId]=0;byServicio[l.servicioId]++;});
+  ultimos30.filter(l=>['listo','archivado'].includes(l.estado)).forEach(l=>{if(!byServicio[l.servicioId])byServicio[l.servicioId]=0;byServicio[l.servicioId]++;});
   const totalL=Object.values(byServicio).reduce((s,v)=>s+v,0);
   if(totalL>0){const maxEntry=Object.entries(byServicio).sort((a,b)=>b[1]-a[1])[0];if(maxEntry&&maxEntry[1]/totalL>0.7){const svc=servicios.find(s=>s.id===maxEntry[0]);recs.push({icono:'⚠️',titulo:'Dependencia de un servicio',descripcion:`El ${svc?.nombre||'mismo servicio'} representa más del 70% de tus ingresos. Intentá promover los otros servicios.`,prioridad:'media'});}}
   if(recs.length===0) recs.push({icono:'✅',titulo:'Todo en orden',descripcion:'No hay alertas urgentes. ¡Seguí así!',prioridad:'baja'});
@@ -2145,9 +2475,13 @@ async function appInit() {
   setTimeout(()=>splash.remove(), 500);
   // Mostrar app
   document.getElementById('app').style.display='block';
-  // Login
+  // Login o Main (Persistencia de sesión)
   await initLogin();
-  showScreen('login');
+  if (auth.get()) {
+    goTo('main');
+  } else {
+    showScreen('login');
+  }
 }
 
 appInit();
