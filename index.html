@@ -1337,12 +1337,48 @@ async function verCliente(id) {
         </div>
         ${['listo','archivado'].includes(l.estado)?'<span class="chip chip-done">✔</span>':''}
       </div>`).join('')}
+    <div class="form-actions mt-md" style="margin-bottom:10px">
+      <button class="btn btn-secondary btn-full" onclick="editarClienteModal('${id}')">✏️ Editar Cliente</button>
+    </div>
     <div class="form-actions">
       <button class="btn btn-secondary btn-full" onclick="closeModal()">Cerrar</button>
       <button class="btn btn-wa btn-full" onclick="clienteWA('${id}')">💬 WhatsApp</button>
     </div>
   `);
 }
+async function editarClienteModal(id) {
+  const todos = await dbGetAll('clientes');
+  const c = todos.find(x=>x.id===id); if(!c) return;
+  openModal(`
+    <div class="modal-title">✏️ Editar Cliente</div>
+    <div class="input-group"><label class="input-label">Nombre *</label><input class="input" id="ecNombre" value="${c.nombre}"/></div>
+    <div class="input-group"><label class="input-label">Teléfono *</label><input class="input" id="ecTel" type="tel" value="${c.telefono}"/></div>
+    <div class="input-group"><label class="input-label">Patentes (separadas por coma)</label><input class="input" id="ecPatentes" value="${(c.patentes||[]).join(', ')}"/></div>
+    <div class="form-actions mt-md">
+      <button class="btn btn-secondary btn-full" onclick="verCliente('${id}')">Volver</button>
+      <button class="btn btn-primary btn-full" onclick="guardarEdicionCliente('${id}')">Guardar</button>
+    </div>
+  `);
+}
+async function guardarEdicionCliente(id) {
+  const nombre = $('#ecNombre').value.trim();
+  const telefono = $('#ecTel').value.trim();
+  const patentes = $('#ecPatentes').value.split(',').map(p=>p.trim()).filter(p=>p);
+  if(!nombre || !telefono){toast('Completá nombre y teléfono','error');return;}
+  
+  const todos = await dbGetAll('clientes');
+  const existente = todos.find(c => c.telefono === telefono && c.id !== id);
+  if(existente){toast('Ya existe otro cliente con ese teléfono','error');return;}
+  
+  const c = todos.find(x=>x.id===id); if(!c) return;
+  await dbPut('clientes', { ...c, nombre, telefono, patentes });
+  
+  toast('Cliente actualizado ✔','success');
+  verCliente(id);
+  renderClientes();
+}
+window.editarClienteModal = editarClienteModal;
+window.guardarEdicionCliente = guardarEdicionCliente;
 async function clienteWA(id) {
   const todos = await dbGetAll('clientes');
   const c = todos.find(x=>x.id===id); if(!c) return;
