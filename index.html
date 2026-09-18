@@ -629,16 +629,22 @@ async function navTo(id) {
     pc.classList.add('fade-out');
     await new Promise(r => setTimeout(r, 150));
   }
+  
   try {
     showView(id);
+    const viewEl = $(`#view-${id}`);
+    if (viewEl && !viewEl.innerHTML.trim()) {
+      viewEl.innerHTML = `<div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:50vh;color:var(--gold);opacity:0.6"><div style="font-size:2rem;margin-bottom:8px">⏳</div><div style="font-size:0.9rem">Cargando datos...</div></div>`;
+    }
+  } finally {
+    if (pc) pc.classList.remove('fade-out');
+  }
+
+  try {
     await renderView(id);
   } catch(e) {
     console.error('Error in navTo:', e);
     toast('Error al cargar la vista', 'error');
-  } finally {
-    if (pc) {
-      pc.classList.remove('fade-out');
-    }
   }
 }
 
