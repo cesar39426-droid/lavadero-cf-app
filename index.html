@@ -833,8 +833,12 @@ async function renderRegistro() {
     <!-- ── PASO 3: VEHÍCULO (marca/modelo/patente) ── -->
     <div class="section-head">3 · Datos del vehículo</div>
     <div class="input-group">
-      <label class="input-label">Marca y modelo <span style="color:var(--muted);font-size:.78rem">(Ej: Ford Ranger, Toyota Corolla)</span></label>
-      <input class="input" id="regModelo" placeholder="Ej: Renault Sandero, VW Amarok..."/>
+      <label class="input-label">Marca del vehículo * <span style="color:var(--muted);font-size:.78rem">(Ej: Toyota, Ford, Chevrolet)</span></label>
+      <input class="input" id="regMarca" placeholder="Ej: Toyota"/>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Modelo <span style="color:var(--muted);font-size:.78rem">(Opcional)</span></label>
+      <input class="input" id="regModelo" placeholder="Ej: Corolla, Ranger..."/>
     </div>
     <div class="input-group">
       <label class="input-label">Patente</label>
@@ -1049,6 +1053,10 @@ async function regConfirmar() {
   // ── Validar servicio ─────────────────────────────────────────
   if (!regServicio) { toast('Seleccioná un servicio tocándolo', 'error'); return; }
 
+  // ── Validar marca del vehículo ───────────────────────────────
+  const marcaVehiculo = $('#regMarca')?.value.trim();
+  if (!marcaVehiculo) { toast('La marca del vehículo es obligatoria', 'error'); return; }
+
   // ── Validar empleado ─────────────────────────────────────────
   const empId = user.rol === 'dueno'
     ? ($('#regEmpId')?.value || user.id)
@@ -1139,6 +1147,7 @@ async function regConfirmar() {
       clienteNombre:    cliente.nombre,
       clienteTelefono:  cliente.telefono,
       patente:          patenteVehiculo || (cliente.patentes || [])[0] || '—',
+      marcaVehiculo:    marcaVehiculo,
       modeloVehiculo:   modeloVehiculo,
       tipoVehiculo:     regVehiculo,
       servicioId:       regServicio,
@@ -1219,7 +1228,7 @@ async function renderDia() {
           ${estadoHtml(l)}
         </div>
         <p class="text-muted" style="font-size:.82rem">${l.servicioNombre||'—'} · ${fmoney(l.precio)}</p>
-        <p class="text-muted" style="font-size:.78rem">Empleado: ${l.empleadoId||'—'}</p>
+        <p class="text-muted" style="font-size:.78rem">🚗 ${l.marcaVehiculo || 'Marca no registrada'}</p>
         <div class="flex-between mt-sm">
           <span class="timer" id="timer-${l.id}">${l.estado==='en_proceso'?elapsedStr(l.fechaInicio):''}</span>
           <div class="flex-gap">
