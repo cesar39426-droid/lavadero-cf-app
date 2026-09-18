@@ -99,6 +99,7 @@ select.field:focus{outline:none;border-color:var(--gold)}
 .row-sub{color:var(--muted);font-size:.78rem}
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center;gap:10px;color:var(--muted)}
 .empty-icon{font-size:3rem}
+details summary::-webkit-details-marker {display:none}
 
 /* ── CHIPS / BADGES ── */
 .chip{display:inline-flex;align-items:center;padding:4px 10px;border-radius:20px;font-size:.72rem;font-weight:600}
@@ -1880,16 +1881,32 @@ async function loadHistorialCierres() {
     return;
   }
   el.innerHTML = ordenados.map(c => `
-    <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:14px;margin-bottom:8px">
-      <div>
-        <p class="fw-bold" style="font-size:.9rem">${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'})}</p>
-        <p class="text-muted" style="font-size:.75rem">${c.totalLavados} lavados · Neto: ${fmoney(c.neto)}</p>
+    <details class="card" style="margin-bottom:8px;padding:12px 16px">
+      <summary style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none;outline:none">
+        <div>
+          <p class="fw-bold" style="font-size:.9rem">📅 ${new Date(c.fecha+'T12:00:00').toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'})}</p>
+          <p class="text-muted" style="font-size:.75rem">${c.totalLavados} lavados · Neto: ${fmoney(c.neto)}</p>
+        </div>
+        <div style="text-align:right">
+          <strong class="text-gold">${fmoney(c.bruto)}</strong>
+          <p class="text-muted" style="font-size:.72rem">bruto ▾</p>
+        </div>
+      </summary>
+      <div style="border-top:1px solid var(--surface2);margin-top:12px;padding-top:12px">
+        <p style="color:var(--gold);font-size:.75rem;font-weight:600;margin-bottom:8px;text-transform:uppercase">Liquidación Empleados</p>
+        ${Object.values(c.liquidacion||{}).map(e => `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:.85rem">${e.nombre} <span class="text-muted" style="font-size:.75rem">(${e.cant} lav)</span></span>
+            <span class="text-gold" style="font-size:.9rem;font-weight:600">${fmoney(e.total)}</span>
+          </div>
+        `).join('')}
+        ${Object.keys(c.liquidacion||{}).length === 0 ? '<p class="text-muted" style="font-size:.8rem">Sin liquidaciones</p>' : ''}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;border-top:1px dashed #333;padding-top:8px">
+          <span style="font-size:.85rem;color:var(--danger)">Costos del día</span>
+          <span style="font-size:.9rem;color:var(--danger);font-weight:600">-${fmoney(c.costos||0)}</span>
+        </div>
       </div>
-      <div style="text-align:right">
-        <strong class="text-gold">${fmoney(c.bruto)}</strong>
-        <p class="text-muted" style="font-size:.72rem">bruto</p>
-      </div>
-    </div>`).join('');
+    </details>`).join('');
 }
 
 async function ejecutarCierreCaja() {
