@@ -1112,10 +1112,22 @@ async function regConfirmar() {
     // ── Datos del vehículo (del formulario del paso 3) ───────────
     const modeloVehiculo  = $('#regModelo')?.value.trim() || '';
     const patenteVehiculo = ($('#regPatenteVehiculo')?.value.trim() || '').toUpperCase();
-    // Agregar patente a la ficha del cliente si es nueva
-    if (patenteVehiculo && !(cliente.patentes || []).includes(patenteVehiculo)) {
-      const patentes = [...(cliente.patentes || []), patenteVehiculo];
-      cliente = await dbPut('clientes', { ...cliente, patentes });
+    // Agregar patente y marca a la ficha del cliente si son nuevas
+    let updateCliente = false;
+    const patentes = [...(cliente.patentes || [])];
+    const marcas = [...(cliente.marcas || [])];
+    
+    if (patenteVehiculo && !patentes.includes(patenteVehiculo)) {
+      patentes.push(patenteVehiculo);
+      updateCliente = true;
+    }
+    if (marcaVehiculo && !marcas.includes(marcaVehiculo)) {
+      marcas.push(marcaVehiculo);
+      updateCliente = true;
+    }
+    
+    if (updateCliente) {
+      cliente = await dbPut('clientes', { ...cliente, patentes, marcas });
     }
 
     // ── Calcular precio según vehículo ───────────────────────────
@@ -1240,7 +1252,7 @@ async function renderDia() {
           ${estadoHtml(l)}
         </div>
         <p class="text-muted" style="font-size:.82rem">${l.servicioNombre||'—'} · ${fmoney(l.precio)}</p>
-        <p class="text-muted" style="font-size:.78rem">🚗 ${l.marcaVehiculo || 'Marca no registrada'}</p>
+        <p class="text-muted" style="font-size:.78rem">🚗 ${l.marcaVehiculo || l.modeloVehiculo || 'Marca no registrada'}</p>
         <div class="flex-between mt-sm">
           <span class="timer" id="timer-${l.id}">${l.estado==='en_proceso'?elapsedStr(l.fechaInicio):''}</span>
           <div class="flex-gap">
@@ -1350,7 +1362,7 @@ function renderClientesLista(clientes, lavados) {
     return `<div class="list-row" onclick="verCliente('${c.id}')">
       <div class="list-row-left">
         <span class="row-title">${c.nombre} ${warn?'<span class="badge-count" style="background:var(--warn)">'+dias+'d</span>':''}</span>
-        <span class="row-sub">📞 ${c.telefono} · 🚗 ${(c.patentes||[]).join(', ')||'sin patente'}</span>
+        <span class="row-sub">📞 ${c.telefono} · 🚗 ${(c.marcas||[]).join(', ')||'sin marca'} - ${(c.patentes||[]).join(', ')||'sin patente'}</span>
         <span class="row-sub">${lc.length} lavado${lc.length!==1?'s':''} · ${ultimo?'Último: '+fdateShort(ultimo.fechaInicio):'Sin historial'}</span>
       </div>
       <span style="color:var(--muted);font-size:1.2rem">›</span>
@@ -1375,6 +1387,7 @@ async function verCliente(id) {
     <div class="modal-title">👤 ${c.nombre}</div>
     <div class="card" style="margin-bottom:12px">
       <p><strong>Teléfono:</strong> ${c.telefono}</p>
+      <p><strong>Marcas:</strong> ${(c.marcas||[]).join(', ')||'—'}</p>
       <p><strong>Patentes:</strong> ${(c.patentes||[]).join(', ')||'—'}</p>
       <p><strong>Alta:</strong> ${fdateShort(c.creadoEn)||'—'}</p>
       <p><strong>Total lavados:</strong> ${lc.length}</p>
@@ -1404,6 +1417,7 @@ async function editarClienteModal(id) {
     <div class="modal-title">✏️ Editar Cliente</div>
     <div class="input-group"><label class="input-label">Nombre *</label><input class="input" id="ecNombre" value="${c.nombre}"/></div>
     <div class="input-group"><label class="input-label">Teléfono *</label><input class="input" id="ecTel" type="tel" value="${c.telefono}"/></div>
+    <div class="input-group"><label class="input-label">Marcas (separadas por coma)</label><input class="input" id="ecMarcas" value="${(c.marcas||[]).join(', ')}"/></div>
     <div class="input-group"><label class="input-label">Patentes (separadas por coma)</label><input class="input" id="ecPatentes" value="${(c.patentes||[]).join(', ')}"/></div>
     <div class="form-actions mt-md">
       <button class="btn btn-secondary btn-full" onclick="verCliente('${id}')">Volver</button>
@@ -1415,6 +1429,7 @@ async function guardarEdicionCliente(id) {
   const nombre = $('#ecNombre').value.trim();
   const telefono = $('#ecTel').value.trim();
   const patentes = $('#ecPatentes').value.split(',').map(p=>p.trim()).filter(p=>p);
+  const marcas = $('#ecMarcas').value.split(',').map(m=>m.trim()).filter(m=>m);
   if(!nombre || !telefono){toast('Completá nombre y teléfono','error');return;}
   
   const todos = await dbGetAll('clientes');
@@ -1422,7 +1437,7 @@ async function guardarEdicionCliente(id) {
   if(existente){toast('Ya existe otro cliente con ese teléfono','error');return;}
   
   const c = todos.find(x=>x.id===id); if(!c) return;
-  await dbPut('clientes', { ...c, nombre, telefono, patentes });
+  await dbPut('clientes', { ...c, nombre, telefono, patentes, marcas });
   
   toast('Cliente actualizado ✔','success');
   verCliente(id);
