@@ -1103,10 +1103,25 @@ async function regConfirmar() {
     if (!svc) { toast('Servicio no encontrado', 'error'); return; }
     const precioFinal = getPrecioSegunVehiculo(svc, regVehiculo);
 
-    // ── Calcular comisiones para TODOS los empleados activos ─────
+    // ── Validar que el empleado asignado esté activo ────────────
     const todosEmpleados = await dbGetAll('empleados');
-    // Filtrar solo empleados activos (excluye al dueño para que no cobre comisión sobre sí mismo, a menos que quieras que el dueño también tenga % asignado)
-    const empleadosActivos = todosEmpleados.filter(e => e.activo && e.rol !== 'dueno');
+    if (empId) {
+      const eCheck = todosEmpleados.find(e => e.id === empId);
+      if (eCheck && !eCheck.activo) {
+        toast('El empleado seleccionado está inactivo. Operación bloqueada.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = '🚗 Agregar a la cola de hoy'; }
+        regSubmitting = false;
+        return;
+      }
+    }
+
+    // ── Calcular comisiones para TODOS los empleados activos ─────
+    // Excluye estrictamente al dueño y empleados inactivos
+    const empleadosActivos = todosEmpleados.filter(e => e.activo === true && e.rol !== 'dueno');
+    if (empleadosActivos.length === 0) {
+      console.warn('TEST OK: No hay empleados activos (o solo hay dueños). La comisión grupal será 0.');
+    }
+
     const comisionesGrupal = empleadosActivos.map(e => {
       const pct = e.comisionPct ?? 15; // 15% por defecto si no tiene
       return {
