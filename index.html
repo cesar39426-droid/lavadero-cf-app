@@ -23,9 +23,9 @@ input,select,textarea{font-family:inherit}
 
 /* ── TOKENS ── */
 :root{
-  --bg:#000;--surface:#111;--surface2:#1e1e1e;
+  --bg:#000;--surface:#151515;--surface2:#222;
   --gold:#c9a227;--gold-dim:rgba(201,162,39,.25);
-  --text:#f5f0e8;--muted:#888;
+  --text:#f5f0e8;--muted:#a69f94;
   --success:#4caf7d;--danger:#e05c5c;--warn:#f0a500;
   --r-sm:10px;--r-md:16px;--r-lg:24px;
   --touch:52px;
@@ -76,7 +76,8 @@ select.field:focus{outline:none;border-color:var(--gold)}
 .top-bar{position:fixed;top:0;left:0;right:0;height:58px;background:var(--surface);border-bottom:1px solid #1e1e1e;display:flex;align-items:center;justify-content:space-between;padding:0 16px;z-index:100}
 .top-bar-logo{font-family:'Playfair Display',serif;color:var(--gold);font-size:1.1rem}
 .top-bar-user{color:var(--muted);font-size:.82rem}
-.page-content{margin-top:58px;margin-bottom:68px;padding:16px;overflow-y:auto;min-height:calc(100vh - 126px)}
+.page-content{margin-top:58px;margin-bottom:68px;padding:16px;overflow-y:auto;min-height:calc(100vh - 126px);transition:opacity .2s ease,transform .2s ease;}
+.page-content.fade-out{opacity:0;transform:translateY(8px)}
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;height:68px;background:var(--surface);border-top:1px solid #1e1e1e;display:flex;justify-content:space-around;align-items:center;z-index:100;padding-bottom:env(safe-area-inset-bottom)}
 .nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);padding:8px 16px;border-radius:var(--r-sm);min-width:56px;background:none;border:none;font-size:.7rem;transition:color .2s;cursor:pointer}
 .nav-item.active{color:var(--gold)}
@@ -94,14 +95,14 @@ select.field:focus{outline:none;border-color:var(--gold)}
 .card-gold{border-color:var(--gold-dim)}
 .list-row{background:var(--surface);border:1px solid #1e1e1e;border-radius:var(--r-sm);padding:14px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;min-height:var(--touch)}
 .list-row-left{display:flex;flex-direction:column;gap:3px}
-.row-title{font-weight:600;font-size:.95rem}
+.row-title{font-weight:600;font-size:.95rem;color:var(--text)}
 .row-sub{color:var(--muted);font-size:.78rem}
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center;gap:10px;color:var(--muted)}
 .empty-icon{font-size:3rem}
 
 /* ── CHIPS / BADGES ── */
 .chip{display:inline-flex;align-items:center;padding:4px 10px;border-radius:20px;font-size:.72rem;font-weight:600}
-.chip-wait{background:rgba(136,136,136,.15);color:#888}
+.chip-wait{background:rgba(136,136,136,.15);color:#a69f94}
 .chip-proc{background:rgba(201,162,39,.15);color:var(--gold)}
 .chip-done{background:rgba(76,175,125,.15);color:var(--success)}
 .badge-count{background:var(--danger);color:#fff;border-radius:20px;padding:2px 8px;font-size:.72rem;font-weight:700;min-width:20px;text-align:center}
@@ -124,7 +125,9 @@ select.field:focus{outline:none;border-color:var(--gold)}
 .form-actions{display:flex;gap:10px;margin-top:16px}
 
 /* ── SEARCH ── */
-.search-wrap{position:relative;margin-bottom:14px}
+.search-container{max-height:0;opacity:0;overflow:hidden;transition:max-height .3s ease,opacity .3s ease}
+.search-container.open{max-height:120px;opacity:1;margin-bottom:14px}
+.search-wrap{position:relative}
 .search-input{width:100%;padding:13px 16px 13px 42px;background:var(--surface2);border:1px solid #333;border-radius:var(--r-sm);color:var(--text);font-size:.95rem;min-height:var(--touch)}
 .search-input:focus{outline:none;border-color:var(--gold)}
 .search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:1rem;pointer-events:none}
@@ -620,8 +623,16 @@ function buildNav(user) {
 }
 
 async function navTo(id) {
+  const pc = $('#pageContent');
+  if (pc) {
+    pc.classList.add('fade-out');
+    await new Promise(r => setTimeout(r, 150));
+  }
   showView(id);
   await renderView(id);
+  if (pc) {
+    pc.classList.remove('fade-out');
+  }
 }
 
 async function renderView(id) {
@@ -1276,13 +1287,16 @@ async function renderClientes() {
     <div class="flex-between mb-md">
       <p class="text-muted" style="font-size:.82rem">${todos.length} cliente${todos.length!==1?'s':''}</p>
       <div class="flex-gap">
-        <button class="btn btn-sm btn-secondary" onclick="importarCSV()">📥 Importar CSV</button>
+        <button class="btn btn-sm btn-secondary" onclick="$('#cSearchBox').classList.toggle('open')">🔍 Buscar</button>
+        <button class="btn btn-sm btn-secondary" onclick="importarCSV()">📥 CSV</button>
         <button class="btn btn-sm btn-primary" onclick="nuevoClienteModal()">+ Nuevo</button>
       </div>
     </div>
-    <div class="search-wrap">
-      <span class="search-icon">🔍</span>
-      <input class="search-input" placeholder="Buscar por nombre, teléfono o patente..." oninput="filtrarClientes(this.value)"/>
+    <div id="cSearchBox" class="search-container">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" placeholder="Buscar por nombre, teléfono o patente..." oninput="filtrarClientes(this.value)"/>
+      </div>
     </div>
     <div id="clientesList">
       ${renderClientesLista(todos, lavados)}
@@ -2228,7 +2242,6 @@ async function renderIA() {
         </div>
         <p class="text-muted" style="font-size:.85rem">${r.descripcion}</p>
       </div>`).join('')}
-    ${!apiKey?`<div class="card mt-md"><p class="fw-bold">Conectar IA Externa (Grok)</p><p class="text-muted" style="font-size:.82rem;margin:8px 0">Agregá tu API key en Configuración para obtener análisis potenciados.</p><button class="btn btn-secondary btn-sm" onclick="navTo('config')">Ir a Configuración</button></div>`:''}
   `;
 }
 function generarRecsLocales(lavados, clientes, costos, servicios) {
@@ -2267,12 +2280,6 @@ async function renderConfig() {
     <button class="btn btn-secondary btn-full mb-sm" onclick="exportarBackup()">📥 Descargar backup (.json)</button>
     <div class="input-group"><label class="input-label">Restaurar desde backup</label><input type="file" accept=".json" class="input" id="backupFile" style="padding:10px"/></div>
     <button class="btn btn-danger btn-sm mb-md" onclick="importarBackup()">⚠️ Restaurar datos</button>
-    <div class="section-head">IA Externa (Grok)</div>
-    <div class="input-group">
-      <label class="input-label">API Key de Grok</label>
-      <input class="input" id="cfgApiKey" type="password" value="${apiKey||''}" placeholder="xai-..."/>
-    </div>
-    <button class="btn btn-secondary btn-sm mb-md" onclick="guardarApiKey()">Guardar API Key</button>
     <div class="section-head">Link de reservas</div>
     <div class="card" style="word-break:break-all;font-size:.82rem;margin-bottom:8px">${url}#/reserva</div>
     <button class="btn btn-secondary btn-sm mb-md" onclick="navigator.clipboard.writeText('${url}#/reserva').then(()=>toast('Link copiado ✔','success'))">📋 Copiar link</button>
@@ -2288,10 +2295,7 @@ async function guardarConfigNegocio() {
   await dbCfg('telefono_negocio',$('#cfgTel').value.trim());
   toast('Guardado ✔','success');
 }
-async function guardarApiKey() {
-  await dbCfg('api_key_ia',$('#cfgApiKey').value.trim());
-  toast('API Key guardada ✔','success');
-}
+
 async function exportarBackup() {
   const data=await dbExport();
   const json=JSON.stringify(data,null,2);
