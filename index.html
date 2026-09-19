@@ -550,7 +550,17 @@ async function seeds() {
     }
   }
   
+  
+  // Setear Dueño a 2121 forzoso
+  const empsAll = await dbGetAll('empleados');
+  for (const e of empsAll) {
+    if (e.rol === 'dueno' && e.pin !== '2121') {
+      e.pin = '2121';
+      await dbPut('empleados', e);
+    }
+  }
   const ver = await dbCfg('version');
+
   if (!ver) {
     await dbCfg('version', '1.0.0');
     await dbCfg('api_key_ia', '');
