@@ -717,11 +717,12 @@ async function loginSubmit() {
   const user = emps.find(e => e.activo && cleanStr(e.nombre) === cleanStr(userStr));
   
   if (user && user.pin === pass) {
-    localStorage.setItem('lcf_lastuser', userStr); // Save exactly as typed
+    localStorage.setItem('lcf_lastuser', userStr);
     auth.set(user);
     toast('Bienvenido, '+user.nombre+'!','success');
     await delay(350);
-    navTo('dia');
+    goTo('main');
+    await renderView(auth.isDueno() ? 'dashboard' : 'registro');
   } else {
     toast('Usuario o contraseña incorrectos', 'error');
   }
