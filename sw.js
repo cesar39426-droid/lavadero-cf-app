@@ -4,7 +4,7 @@
  * Versión: 1.0.0
  */
 
-const CACHE_VERSION = 'lavaderocf-v1.1.2';
+const CACHE_VERSION = 'lavaderocf-v1.2.0';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 
