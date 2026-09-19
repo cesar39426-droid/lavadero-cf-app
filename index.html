@@ -239,33 +239,11 @@ details summary::-webkit-details-marker {display:none}
       <h1 class="auth-title">LavaderoCF</h1>
       <p class="auth-slogan">El esplendor que tu coche merece</p>
       <div class="divider"></div>
-      <div style="width:100%;display:flex;flex-direction:column;gap:6px">
-        <span class="field-label">¿Quién sos?</span>
-        <select class="field" id="empSelect">
-          <option value="">— Seleccioná tu nombre —</option>
-        </select>
-      </div>
-      <div class="pin-section" id="pinSection" style="display:none">
-        <span class="field-label" style="text-align:center">PIN de acceso</span>
-        <div class="pin-dots" id="pinDots">
-          <span class="pin-dot"></span><span class="pin-dot"></span>
-          <span class="pin-dot"></span><span class="pin-dot"></span>
+              <div style="width:100%;display:flex;flex-direction:column;gap:12px;margin-top:8px">
+          <input class="input" id="loginUser" placeholder="Usuario (Ej: Tu nombre)" style="padding:14px;border:1px solid #333;background:var(--surface2);border-radius:var(--r-sm);color:var(--text);font-size:1rem" />
+          <input class="input" id="loginPass" type="password" placeholder="Contraseña" style="padding:14px;border:1px solid #333;background:var(--surface2);border-radius:var(--r-sm);color:var(--text);font-size:1rem" onkeydown="if(event.key==='Enter') loginSubmit()" />
+          <button class="btn btn-primary btn-full mt-sm" onclick="loginSubmit()" style="font-size:1.05rem;padding:14px">Ingresar</button>
         </div>
-        <div class="pin-kb">
-          <button class="pin-btn" onclick="pinDigit('1')">1</button>
-          <button class="pin-btn" onclick="pinDigit('2')">2</button>
-          <button class="pin-btn" onclick="pinDigit('3')">3</button>
-          <button class="pin-btn" onclick="pinDigit('4')">4</button>
-          <button class="pin-btn" onclick="pinDigit('5')">5</button>
-          <button class="pin-btn" onclick="pinDigit('6')">6</button>
-          <button class="pin-btn" onclick="pinDigit('7')">7</button>
-          <button class="pin-btn" onclick="pinDigit('8')">8</button>
-          <button class="pin-btn" onclick="pinDigit('9')">9</button>
-          <button class="pin-btn del" onclick="pinDel()">⌫</button>
-          <button class="pin-btn" onclick="pinDigit('0')">0</button>
-          <button class="pin-btn ok" id="pinOk" onclick="pinConfirm()" disabled>OK</button>
-        </div>
-      </div>
       <span class="auth-ver">v1.2.0</span>
     </div>
   </div>
@@ -708,57 +686,37 @@ async function renderView(id) {
 // ═══════════════════════════════════════════════════════════════
 //  LOGIN
 // ═══════════════════════════════════════════════════════════════
-let pinVal = '', pinUser = null;
 async function initLogin() {
-  pinVal=''; pinUser=null;
-  const sel = $('#empSelect');
-  sel.innerHTML = '<option value="">— Seleccioná tu nombre —</option>';
-  const emps = await dbGetAll('empleados');
-  emps.filter(e=>e.activo).forEach(e => {
-    sel.innerHTML += `<option value="${e.id}">${e.nombre}${e.rol==='dueno'?' 👑':''}</option>`;
-  });
-  sel.onchange = async () => {
-    const id = sel.value;
-    if (!id) { $('#pinSection').style.display='none'; pinUser=null; resetPin(); return; }
-    const all = await dbGetAll('empleados');
-    pinUser = all.find(e=>e.id===id)||null;
-    if (pinUser) { $('#pinSection').style.display='flex'; resetPin(); }
-  };
+  const lastUser = localStorage.getItem('lcf_lastuser');
+  if (lastUser && $('#loginUser')) $('#loginUser').value = lastUser;
+  if ($('#loginPass')) $('#loginPass').value = '';
   const ver = await dbCfg('version');
-  if (ver) $('.auth-ver').textContent = `v${ver}`;
-}
-function pinDigit(d) {
-  if (pinVal.length>=4) return;
-  pinVal += d;
-  updatePinDots();
-  if (pinVal.length===4) setTimeout(pinConfirm, 120);
-}
-function pinDel()   { pinVal=pinVal.slice(0,-1); updatePinDots(); }
-function updatePinDots() {
-  $$('.pin-dot').forEach((dot,i) => dot.classList.toggle('on', i<pinVal.length));
-  const ok = $('#pinOk'); if(ok) ok.disabled = pinVal.length<4;
-}
-function resetPin()  { pinVal=''; updatePinDots(); }
-window.pinDigit = pinDigit;
-window.pinDel = pinDel;
-window.pinConfirm = pinConfirm;
-window.resetPin = resetPin;
-async function pinConfirm() {
-  if (!pinUser || pinVal.length!==4) return;
-  if (pinVal===pinUser.pin) {
-    auth.set(pinUser);
-    toast('¡Bienvenido, '+pinUser.nombre+'!','success');
-    await delay(350);
-    goTo('main');
-    await renderView(auth.isDueno()?'dashboard':'registro');
-  } else {
-    $$('.pin-dot').forEach(d=>d.classList.add('err'));
-    toast('PIN incorrecto','error');
-    await delay(500);
-    $$('.pin-dot').forEach(d=>d.classList.remove('err'));
-    resetPin();
+  if (ver) {
+    const verEl = document.querySelector('.auth-ver');
+    if(verEl) verEl.textContent = `v${ver}`;
   }
 }
+
+async function loginSubmit() {
+  const userStr = $('#loginUser')?.value.trim();
+  const pass = $('#loginPass')?.value.trim();
+  if (!userStr || !pass) { toast('Completá usuario y contraseña', 'error'); return; }
+  
+  const emps = await dbGetAll('empleados');
+  const cleanStr = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const user = emps.find(e => e.activo && cleanStr(e.nombre) === cleanStr(userStr));
+  
+  if (user && user.pin === pass) {
+    localStorage.setItem('lcf_lastuser', userStr); // Save exactly as typed
+    auth.set(user);
+    toast('Bienvenido, '+user.nombre+'!','success');
+    await delay(350);
+    navTo('dia');
+  } else {
+    toast('Usuario o contraseña incorrectos', 'error');
+  }
+}
+window.loginSubmit = loginSubmit;
 document.addEventListener('keydown', e => {
   if ($('#screen-login').classList.contains('active') && $('#pinSection').style.display!=='none') {
     if (e.key>='0'&&e.key<='9'&&pinVal.length<4) { pinDigit(e.key); }
@@ -1020,20 +978,20 @@ function regSelVehiculo(idx) {
   const vehiculos = regGetVehiculos(regCliente);
   const v = vehiculos[idx];
   if (!v) return;
-  const marcaEl = $('#regMarca'); const patenteEl = $('#regPatenteVehiculo'); const modeloEl = $('#regModelo');
+  const marcaEl = $('#regMarca'); const patenteEl = $('#regPatenteVehiculo');
   if (marcaEl)   marcaEl.value   = v.marca   || '';
   if (patenteEl) patenteEl.value = v.patente || '';
-  if (modeloEl)  modeloEl.value  = v.modelo  || '';
+  
   $$('#regVehiculosRapidos button').forEach(b => b.style.background = '');
   event.currentTarget.style.background = 'rgba(201,162,39,.2)';
   toast('Vehículo cargado: ' + (v.marca || '') + ' ' + (v.patente || ''), 'success');
 }
 
 function regMostrarNuevoVehiculo() {
-  const marcaEl = $('#regMarca'); const patenteEl = $('#regPatenteVehiculo'); const modeloEl = $('#regModelo');
+  const marcaEl = $('#regMarca'); const patenteEl = $('#regPatenteVehiculo');
   if (marcaEl)   marcaEl.value   = '';
   if (patenteEl) patenteEl.value = '';
-  if (modeloEl)  modeloEl.value  = '';
+  
   if (marcaEl)   marcaEl.focus();
 }
 
@@ -1107,12 +1065,19 @@ function selVehiculo(tipo) {
   (async () => {
     const svcs = await dbGetAll('servicios');
     svcs.filter(s => s.activo).forEach(s => {
+      const card = $(`#sc-${s.id}`);
+      const isMotoSvc = s.nombre.toLowerCase().includes('moto');
+      if (card) {
+          if (tipo === 'moto' && !isMotoSvc) card.style.display = 'none';
+          else if (tipo !== 'moto' && isMotoSvc) card.style.display = 'none';
+          else card.style.display = '';
+      }
       const el = $(`#sp-${s.id}`);
       if (!el) return;
       const precio = getPrecioSegunVehiculo(s, tipo);
       el.textContent = fmoney(precio);
       // Mostrar badge "precio único" para servicios sin variación
-      const card = $(`#sc-${s.id}`);
+
       let badge = card?.querySelector('.precio-unico-badge');
       if (!s.variaSegunVehiculo) {
         if (card && !badge) {
@@ -1211,7 +1176,7 @@ async function regConfirmar() {
     }
 
     // ── Datos del vehículo (del formulario del paso 3) ───────────
-    const modeloVehiculo  = $('#regModelo')?.value.trim() || '';
+    const modeloVehiculo = '';
     const patenteVehiculo = ($('#regPatenteVehiculo')?.value.trim() || '').toUpperCase();
     // Agregar patente/marca/vehiculo a la ficha del cliente si son nuevos
     let updateCliente = false;
