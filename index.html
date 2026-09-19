@@ -274,7 +274,10 @@ details summary::-webkit-details-marker {display:none}
   <div id="screen-main" class="screen">
     <div class="top-bar">
       <span class="top-bar-logo font-serif">LavaderoCF</span>
-      <span class="top-bar-user" id="topUser"></span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="top-bar-user" id="topUser"></span>
+        <button onclick="cerrarSesion()" style="background:none;border:1px solid var(--gold-dim);color:var(--muted);font-size:.75rem;padding:4px 10px;border-radius:20px;cursor:pointer;transition:all .2s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-dim)';this.style.color='var(--muted)'">🚪 Salir</button>
+      </div>
     </div>
     <div class="page-content" id="pageContent">
       <!-- views here -->
@@ -2387,7 +2390,12 @@ async function importarBackup() {
   },'Sí, restaurar');
 }
 function cerrarSesion() {
-  confirmModal('¿Cerrar sesión?',()=>{auth.clear();goTo('login');},);
+  confirmModal('¿Cerrar sesión?', () => {
+    auth.clear();
+    // Reemplazar historial para que "Atrás" no regrese al panel
+    history.replaceState(null, '', location.href);
+    goTo('login');
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
