@@ -1527,25 +1527,24 @@ async function renderFinanzas() {
   const isDueno = user.rol === 'dueno';
 
   // Helper para sacar totales y comisiones de un arreglo de lavados
-  const getStats = (arr) => {
-    let total = 0;
-    let comision = 0;
-    arr.forEach(l => {
-      if (isDueno) {
-        total += l.precio || 0;
-        comision += l.comisionMonto || 0;
-      } else {
-        const miCom = (l.comisionesGrupal || []).find(c => c.empleadoId === user.id);
-        if (miCom) {
-           total += l.precio || 0;
-           comision += miCom.monto;
-        } else if (l.empleadoId === user.id) { // Fallback para los viejos
-           total += l.precio || 0;
-           comision += l.comisionMonto || 0;
+    const getStats = (arr) => {
+      let total = 0;
+      let comision = 0;
+      arr.forEach(l => {
+        if (isDueno) {
+          total += l.precio || 0;
+          comision += l.comisionMonto || 0;
+        } else {
+          const miCom = (l.comisionesGrupal || []).find(c => c.empleadoId === user.id);
+          if (miCom) {
+             comision += miCom.monto;
+          } else if (l.empleadoId === user.id) {
+             comision += l.comisionMonto || 0;
+          }
         }
-      }
-    });
-    return { total, comision, lavados: arr.length };
+      });
+      return { total, comision, lavados: arr.length };
+    };
   };
 
   // Fechas límite
@@ -1681,20 +1680,26 @@ async function renderFinanzas() {
     <!-- KPIs de HOY -->
     <div class="section-head" style="margin-top:16px">Hoy — ${new Date().toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'})}</div>
     <div style="display:grid;grid-template-columns:${isDueno?'repeat(3,1fr)':'1fr 1fr'};gap:10px;margin-bottom:16px">
+      ${isDueno ? `
       <div class="card" style="text-align:center;padding:14px">
-        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">💵 INGRESOS HOY</div>
+        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">💰 INGRESOS HOY</div>
         <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(statDia.total)}</div>
       </div>
+      ` : `
       <div class="card" style="text-align:center;padding:14px">
-        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">${isDueno?'🤝 COMISIONES HOY':'💸 MI COMISIÓN HOY'}</div>
+        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">🚗 LAVADOS HOY</div>
+        <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${statDia.lavados}</div>
+      </div>
+      `}
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">${isDueno?'💸 COMISIONES HOY':'💰 MI COMISIÓN HOY'}</div>
         <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(statDia.comision)}</div>
       </div>
       ${isDueno ? `<div class="card" style="text-align:center;padding:14px">
-        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">✅ NETA HOY</div>
+        <div style="color:var(--muted);font-size:.7rem;margin-bottom:4px">📈 NETA HOY</div>
         <div style="color:var(--gold);font-weight:700;font-size:1.15rem">${fmoney(statDia.total - statDia.comision)}</div>
-      </div>` : `<div></div>`}
+      </div>` : ''}
     </div>
-
     <!-- Desglose HOY por vehículo -->
     <div class="section-head">Detalle de lavados (Hoy)</div>
     ${listosDia.length === 0
