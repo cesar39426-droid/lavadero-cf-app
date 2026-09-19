@@ -534,6 +534,20 @@ async function seeds() {
       }
     }
   }
+  // Seed new services (idempotent - only adds if name not present)
+  const seedNewSvcs = [
+    {nombre:'Lavado Completo',  precioAuto:30000, precioCamioneta:35000, precio4x4:40000,  precioMoto:0,     precio:30000, variaSegunVehiculo:true,  descripcion:'Lavado exterior artesanal + aspirado interior + acondicionado de plasticos', comisionPct:15, activo:true},
+    {nombre:'Solo Exterior',    precioAuto:20000, precioCamioneta:20000, precio4x4:30000,  precioMoto:0,     precio:20000, variaSegunVehiculo:true,  descripcion:'Lavado artesanal de carroceria y llantas, sin interior', comisionPct:15, activo:true},
+    {nombre:'Solo Interior',    precioAuto:20000, precioCamioneta:20000, precio4x4:30000,  precioMoto:0,     precio:20000, variaSegunVehiculo:true,  descripcion:'Aspirado profundo y acondicionado de plasticos interiores, sin exterior', comisionPct:15, activo:true},
+    {nombre:'Moto 110cc',       precioAuto:16000, precioCamioneta:16000, precio4x4:16000,  precioMoto:16000, precio:16000, variaSegunVehiculo:false, descripcion:'Lavado artesanal de moto 110cc', comisionPct:15, activo:true},
+    {nombre:'Moto 150cc',       precioAuto:18000, precioCamioneta:18000, precio4x4:18000,  precioMoto:18000, precio:18000, variaSegunVehiculo:false, descripcion:'Lavado artesanal de moto 150cc', comisionPct:15, activo:true},
+  ];
+  const allSvcs2 = await dbGetAll('servicios');
+  for (const ns of seedNewSvcs) {
+    if (!allSvcs2.some(s => s.nombre === ns.nombre)) {
+      await dbPut('servicios', ns);
+    }
+  }
   const ver = await dbCfg('version');
   if (!ver) {
     await dbCfg('version', '1.0.0');
@@ -829,6 +843,9 @@ async function renderRegistro() {
       <button class="btn btn-sm btn-secondary mt-sm" onclick="regOcultarNuevoCliente()">↩ Cancelar</button>
     </div>
 
+    <!-- Vehículos rápidos del cliente seleccionado -->
+    <div id="regVehiculosRapidos" style="display:none;background:rgba(201,162,39,.07);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:12px;margin-bottom:12px"></div>
+
     <!-- ── PASO 2: TIPO DE VEHÍCULO ── -->
     <div class="section-head">2 · Tipo de vehículo</div>
     <div class="vehicle-grid">
@@ -840,6 +857,9 @@ async function renderRegistro() {
       </button>
       <button class="vehicle-btn" id="vt-4x4" onclick="selVehiculo('4x4')">
         <span class="icon">🚙</span>4x4 / SUV<br><span style="font-size:.7rem;color:var(--muted)">120 min</span>
+      </button>
+      <button class="vehicle-btn" id="vt-moto" onclick="selVehiculo('moto')">
+        <span class="icon">🏍️</span>Moto<br><span style="font-size:.7rem;color:var(--muted)">30 min</span>
       </button>
     </div>
 
@@ -901,7 +921,8 @@ async function regBuscar(q) {
     const found = todos.filter(c =>
       c.nombre?.toLowerCase().includes(ql) ||
       c.telefono?.includes(ql) ||
-      (c.patentes || []).some(p => p.toLowerCase().includes(ql))
+      (c.patentes || []).some(p => p.toLowerCase().includes(ql)) ||
+      (c.vehiculos || []).some(v => v.patente?.toLowerCase().includes(ql) || v.marca?.toLowerCase().includes(ql))
     ).slice(0, 6);
 
     if (found.length === 0) {
@@ -935,8 +956,61 @@ async function regSelCliente(id) {
   $('#regClienteNombre').textContent = '✔ ' + regCliente.nombre;
   $('#regClienteDetalle').textContent =
     `📞 ${regCliente.telefono}` +
-    ((regCliente.patentes||[]).length ? ` · 🚗 ${regCliente.patentes.join(', ')}` : '') +
     (historial.length ? ` · ${historial.length} lavado${historial.length !== 1 ? 's' : ''} previos` : ' · Cliente nuevo');
+
+  // Mostrar vehiculos del cliente para seleccion rapida
+  const vehiculosCliente = regGetVehiculos(regCliente);
+  const vehContainer = $('#regVehiculosRapidos');
+  if (vehContainer) {
+    if (vehiculosCliente.length > 0) {
+      vehContainer.style.display = 'block';
+      vehContainer.innerHTML = `
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">Vehículos registrados — tocá para cargar</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${vehiculosCliente.map((v, i) => `
+            <button class="btn btn-secondary btn-sm" onclick="regSelVehiculo(${i})"
+              style="font-size:.78rem;padding:6px 12px;border-radius:20px">
+              🚗 ${v.marca || '?'}${v.patente ? ' · ' + v.patente : ''}
+            </button>`).join('')}
+          <button class="btn btn-secondary btn-sm" onclick="regMostrarNuevoVehiculo()"
+            style="font-size:.78rem;padding:6px 12px;border-radius:20px;border-color:var(--gold-dim)">
+            ➕ Otro vehículo
+          </button>
+        </div>
+      `;
+    } else {
+      vehContainer.style.display = 'none';
+    }
+  }
+}
+
+function regGetVehiculos(cliente) {
+  if (cliente.vehiculos && cliente.vehiculos.length > 0) return cliente.vehiculos;
+  return (cliente.patentes || []).map((p, i) => ({
+    patente: p, marca: (cliente.marcas || [])[i] || '', modelo: ''
+  }));
+}
+
+function regSelVehiculo(idx) {
+  if (!regCliente) return;
+  const vehiculos = regGetVehiculos(regCliente);
+  const v = vehiculos[idx];
+  if (!v) return;
+  const marcaEl = $('#regMarca'); const patenteEl = $('#regPatenteVehiculo'); const modeloEl = $('#regModelo');
+  if (marcaEl)   marcaEl.value   = v.marca   || '';
+  if (patenteEl) patenteEl.value = v.patente || '';
+  if (modeloEl)  modeloEl.value  = v.modelo  || '';
+  $$('#regVehiculosRapidos button').forEach(b => b.style.background = '');
+  event.currentTarget.style.background = 'rgba(201,162,39,.2)';
+  toast('Vehículo cargado: ' + (v.marca || '') + ' ' + (v.patente || ''), 'success');
+}
+
+function regMostrarNuevoVehiculo() {
+  const marcaEl = $('#regMarca'); const patenteEl = $('#regPatenteVehiculo'); const modeloEl = $('#regModelo');
+  if (marcaEl)   marcaEl.value   = '';
+  if (patenteEl) patenteEl.value = '';
+  if (modeloEl)  modeloEl.value  = '';
+  if (marcaEl)   marcaEl.focus();
 }
 
 function regNuevoClienteForm() {
@@ -988,21 +1062,21 @@ function regLimpiarCliente() {
 }
 
 function getPrecioSegunVehiculo(svc, tipo) {
-  // Si el servicio no varía según vehículo, siempre retorna precio base
   if (!svc.variaSegunVehiculo) return svc.precioAuto || svc.precio;
   if (tipo === 'camioneta') return svc.precioCamioneta || svc.precio;
-  if (tipo === '4x4')       return svc.precio4x4        || svc.precio;
+  if (tipo === '4x4')       return svc.precio4x4       || svc.precio;
+  if (tipo === 'moto')      return svc.precioMoto       || svc.precioAuto || svc.precio;
   return svc.precioAuto || svc.precio;
 }
 
 function selVehiculo(tipo) {
   regVehiculo = tipo;
-  ['auto', 'camioneta', '4x4'].forEach(t => {
+  ['auto', 'camioneta', '4x4', 'moto'].forEach(t => {
     const b = $(`#vt-${t}`);
     if (b) b.classList.toggle('selected', t === tipo);
   });
   // Actualizar etiqueta
-  const labels = { auto: '— Auto', camioneta: '— Camioneta / Familiar', '4x4': '— 4x4 / SUV' };
+  const labels = { auto: '— Auto', camioneta: '— Camioneta / Familiar', '4x4': '— 4x4 / SUV', moto: '— Moto' };
   const lbl = $('#regVehiculoLabel');
   if (lbl) lbl.textContent = labels[tipo] || '';
   // Actualizar precios en las cards según vehículo
@@ -1091,6 +1165,8 @@ async function regConfirmar() {
       cliente = await dbPut('clientes', {
         nombre, telefono: tel,
         patentes: [],
+        marcas: [],
+        vehiculos: [],
         email: '', creadoEn: new Date().toISOString()
       });
     }
@@ -1113,11 +1189,12 @@ async function regConfirmar() {
     // ── Datos del vehículo (del formulario del paso 3) ───────────
     const modeloVehiculo  = $('#regModelo')?.value.trim() || '';
     const patenteVehiculo = ($('#regPatenteVehiculo')?.value.trim() || '').toUpperCase();
-    // Agregar patente y marca a la ficha del cliente si son nuevas
+    // Agregar patente/marca/vehiculo a la ficha del cliente si son nuevos
     let updateCliente = false;
     const patentes = [...(cliente.patentes || [])];
-    const marcas = [...(cliente.marcas || [])];
-    
+    const marcas   = [...(cliente.marcas   || [])];
+    const vehiculos = [...(cliente.vehiculos || [])];
+
     if (patenteVehiculo && !patentes.includes(patenteVehiculo)) {
       patentes.push(patenteVehiculo);
       updateCliente = true;
@@ -1126,9 +1203,13 @@ async function regConfirmar() {
       marcas.push(marcaVehiculo);
       updateCliente = true;
     }
-    
+    const vehiculoExiste = vehiculos.some(v => v.patente === patenteVehiculo && v.marca === marcaVehiculo);
+    if ((patenteVehiculo || marcaVehiculo) && !vehiculoExiste) {
+      vehiculos.push({ patente: patenteVehiculo || '', marca: marcaVehiculo || '', modelo: modeloVehiculo || '' });
+      updateCliente = true;
+    }
     if (updateCliente) {
-      cliente = await dbPut('clientes', { ...cliente, patentes, marcas });
+      cliente = await dbPut('clientes', { ...cliente, patentes, marcas, vehiculos });
     }
 
     // ── Calcular precio según vehículo ───────────────────────────
@@ -2205,18 +2286,37 @@ async function activarEmp(id) {
 async function renderServicios() {
   const el=$('#view-servicios');
   const svcs=await dbGetAll('servicios');
+  const activos = svcs.filter(s=>s.activo!==false);
+  const inactivos = svcs.filter(s=>s.activo===false);
   el.innerHTML=`
     <p class="view-title">Servicios y Precios</p>
-    <p class="view-sub">Editá los precios base</p>
-    ${svcs.map(s=>`
+    <p class="view-sub">Gestioná los servicios del negocio</p>
+    <button class="btn btn-primary btn-full mb-md" onclick="nuevoServicioModal()">➕ Crear nuevo servicio</button>
+    ${activos.map(s=>`
       <div class="card">
         <div class="flex-between mb-sm">
           <p class="fw-bold">${s.nombre}</p>
-          <strong class="text-gold">${fmoney(s.precio)}</strong>
+          <div style="text-align:right">
+            <strong class="text-gold">${fmoney(s.precioAuto||s.precio)}</strong>
+            ${s.variaSegunVehiculo ? `<div style="font-size:.68rem;color:var(--muted)">🚗 ${fmoney(s.precioAuto||s.precio)} · 🚐 ${fmoney(s.precioCamioneta||s.precio)} · 🚙 ${fmoney(s.precio4x4||s.precio)}</div>` : ''}
+          </div>
         </div>
         <p class="text-muted" style="font-size:.78rem">${s.descripcion||''}</p>
-        <button class="btn btn-secondary btn-sm mt-sm" onclick="editarServicioModal('${s.id}')">✏️ Editar</button>
+        <p style="font-size:.72rem;color:var(--muted);margin-top:4px">Comisión: <strong style="color:var(--gold)">${s.comisionPct||15}%</strong></p>
+        <div class="flex-gap mt-sm">
+          <button class="btn btn-secondary btn-sm" onclick="editarServicioModal('${s.id}')">✏️ Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="desactivarServicio('${s.id}')">🚫 Desactivar</button>
+        </div>
       </div>`).join('')}
+    ${inactivos.length ? `
+      <div class="section-head" style="margin-top:24px;color:var(--muted)">Servicios inactivos</div>
+      ${inactivos.map(s=>`
+        <div class="card" style="opacity:.5">
+          <div class="flex-between">
+            <p class="fw-bold">${s.nombre}</p>
+            <button class="btn btn-secondary btn-sm" onclick="reactivarServicio('${s.id}')">↩ Reactivar</button>
+          </div>
+        </div>`).join('')}` : ''}
   `;
 }
 async function editarServicioModal(id) {
@@ -2225,7 +2325,15 @@ async function editarServicioModal(id) {
   openModal(`
     <div class="modal-title">✏️ Editar Servicio</div>
     <div class="input-group"><label class="input-label">Nombre</label><input class="input" id="esNombre" value="${s.nombre}"/></div>
-    <div class="input-group"><label class="input-label">Precio ($)</label><input class="input" id="esPrecio" type="number" value="${s.precio}"/></div>
+    ${s.variaSegunVehiculo ? `
+      <div class="section-head" style="font-size:.8rem;margin:12px 0 6px">Precios por tipo</div>
+      <div class="input-group"><label class="input-label">🚗 Auto ($)</label><input class="input" id="esPrecioAuto" type="number" value="${s.precioAuto||s.precio}"/></div>
+      <div class="input-group"><label class="input-label">🚐 Camioneta ($)</label><input class="input" id="esPrecioCamioneta" type="number" value="${s.precioCamioneta||s.precio}"/></div>
+      <div class="input-group"><label class="input-label">🚙 4x4 / SUV ($)</label><input class="input" id="esPrecio4x4" type="number" value="${s.precio4x4||s.precio}"/></div>
+    ` : `
+      <div class="input-group"><label class="input-label">Precio único ($)</label><input class="input" id="esPrecio" type="number" value="${s.precioAuto||s.precio}"/></div>
+    `}
+    <div class="input-group"><label class="input-label">% Comisión empleado</label><input class="input" id="esComision" type="number" min="0" max="100" value="${s.comisionPct||15}"/></div>
     <div class="input-group"><label class="input-label">Descripción</label><textarea class="input" id="esDesc" rows="2">${s.descripcion||''}</textarea></div>
     <div class="form-actions">
       <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
@@ -2236,15 +2344,93 @@ async function editarServicioModal(id) {
 async function guardarServicio(id) {
   const svcs=await dbGetAll('servicios');
   const s=svcs.find(x=>x.id===id); if(!s) return;
-  await dbPut('servicios',{...s,
-    nombre:$('#esNombre').value.trim()||s.nombre,
-    precio:Number($('#esPrecio').value)||s.precio,
-    descripcion:$('#esDesc').value.trim()
-  });
+  const comisionPct = Number($('#esComision')?.value) || s.comisionPct || 15;
+  if (s.variaSegunVehiculo) {
+    const pa = Number($('#esPrecioAuto')?.value) || s.precioAuto || s.precio;
+    const pc = Number($('#esPrecioCamioneta')?.value) || s.precioCamioneta || s.precio;
+    const p4 = Number($('#esPrecio4x4')?.value) || s.precio4x4 || s.precio;
+    await dbPut('servicios',{...s, nombre:$('#esNombre')?.value.trim()||s.nombre, precioAuto:pa, precioCamioneta:pc, precio4x4:p4, precio:pa, comisionPct, descripcion:$('#esDesc')?.value.trim()});
+  } else {
+    const p = Number($('#esPrecio')?.value) || s.precio;
+    await dbPut('servicios',{...s, nombre:$('#esNombre')?.value.trim()||s.nombre, precioAuto:p, precioCamioneta:p, precio4x4:p, precio:p, comisionPct, descripcion:$('#esDesc')?.value.trim()});
+  }
   closeModal(); toast('Servicio actualizado ✔','success'); await renderServicios();
+}
+async function nuevoServicioModal() {
+  openModal(`
+    <div class="modal-title">➕ Nuevo Servicio</div>
+    <div class="input-group"><label class="input-label">Nombre *</label><input class="input" id="nsNombre" placeholder="Ej: Tapizado Premium"/></div>
+    <div class="input-group">
+      <label class="input-label">Precio varía según vehículo?</label>
+      <select class="input" id="nsVaria" onchange="nsTogglePrices()">
+        <option value="si">Sí (auto / camioneta / 4x4 tienen distinto precio)</option>
+        <option value="no">No (precio único para todos)</option>
+      </select>
+    </div>
+    <div id="nsPreciosVariables">
+      <div class="input-group"><label class="input-label">🚗 Auto ($)</label><input class="input" id="nsPrecioAuto" type="number" placeholder="30000"/></div>
+      <div class="input-group"><label class="input-label">🚐 Camioneta ($)</label><input class="input" id="nsPrecioCamioneta" type="number" placeholder="35000"/></div>
+      <div class="input-group"><label class="input-label">🚙 4x4 / SUV ($)</label><input class="input" id="nsPrecio4x4" type="number" placeholder="40000"/></div>
+    </div>
+    <div id="nsPrecioUnico" style="display:none">
+      <div class="input-group"><label class="input-label">Precio único ($)</label><input class="input" id="nsPrecio" type="number" placeholder="50000"/></div>
+    </div>
+    <div class="input-group"><label class="input-label">% Comisión empleado</label><input class="input" id="nsComision" type="number" min="0" max="100" value="15"/></div>
+    <div class="input-group"><label class="input-label">Descripción</label><textarea class="input" id="nsDesc" rows="2" placeholder="Descripción del servicio..."></textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary btn-full" onclick="crearServicio()">Crear Servicio</button>
+    </div>
+  `);
+}
+function nsTogglePrices() {
+  const v = $('#nsVaria')?.value;
+  const varEl = $('#nsPreciosVariables'); const uniEl = $('#nsPrecioUnico');
+  if (varEl) varEl.style.display = v === 'si' ? 'block' : 'none';
+  if (uniEl) uniEl.style.display = v === 'no' ? 'block' : 'none';
+}
+async function crearServicio() {
+  const nombre = $('#nsNombre')?.value.trim();
+  if (!nombre) { toast('El nombre es obligatorio','error'); return; }
+  const varia = $('#nsVaria')?.value === 'si';
+  const comisionPct = Number($('#nsComision')?.value) || 15;
+  let pa, pc, p4, precio;
+  if (varia) {
+    pa = Number($('#nsPrecioAuto')?.value) || 0;
+    pc = Number($('#nsPrecioCamioneta')?.value) || pa;
+    p4 = Number($('#nsPrecio4x4')?.value) || pa;
+    precio = pa;
+  } else {
+    precio = Number($('#nsPrecio')?.value) || 0;
+    pa = pc = p4 = precio;
+  }
+  if (!precio) { toast('Ingresa al menos un precio','error'); return; }
+  await dbPut('servicios', { nombre, precioAuto:pa, precioCamioneta:pc, precio4x4:p4, precio, precioMoto:precio, variaSegunVehiculo:varia, comisionPct, descripcion:$('#nsDesc')?.value.trim()||'', activo:true });
+  closeModal(); toast('Servicio "' + nombre + '" creado', 'success'); await renderServicios();
+}
+async function desactivarServicio(id) {
+  confirmModal('Desactivar este servicio? No aparecera en el registro pero los datos historicos se conservan.', async () => {
+    const svcs = await dbGetAll('servicios');
+    const s = svcs.find(x=>x.id===id); if(!s) return;
+    await dbPut('servicios', {...s, activo:false});
+    toast('Servicio desactivado','info'); await renderServicios();
+  }, 'Desactivar', 'btn-danger');
+}
+async function reactivarServicio(id) {
+  const svcs = await dbGetAll('servicios');
+  const s = svcs.find(x=>x.id===id); if(!s) return;
+  await dbPut('servicios', {...s, activo:true});
+  toast('Servicio reactivado','success'); await renderServicios();
 }
 window.editarServicioModal = editarServicioModal;
 window.guardarServicio = guardarServicio;
+window.nuevoServicioModal = nuevoServicioModal;
+window.nsTogglePrices = nsTogglePrices;
+window.crearServicio = crearServicio;
+window.desactivarServicio = desactivarServicio;
+window.reactivarServicio = reactivarServicio;
+window.regSelVehiculo = regSelVehiculo;
+window.regMostrarNuevoVehiculo = regMostrarNuevoVehiculo;
 
 // ═══════════════════════════════════════════════════════════════
 //  VIEW: RECORDATORIOS
