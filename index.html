@@ -548,6 +548,30 @@ async function seeds() {
       await dbPut('servicios', ns);
     }
   }
+  const lavsHoy = await dbGetAll('lavados');
+  const hoyStr = new Date().toISOString().slice(0,10);
+  const svcsActuales = await dbGetAll('servicios');
+  for (const l of lavsHoy) {
+    if (l.fechaInicio && l.fechaInicio.startsWith(hoyStr)) {
+      const svcRef = svcsActuales.find(s => s.id === l.servicioId);
+      if (svcRef && l.comisionesGrupal && l.comisionesGrupal.length > 0) {
+        let changed = false;
+        const newComs = l.comisionesGrupal.map(c => {
+          const expectedPct = svcRef.comisionPct !== undefined ? svcRef.comisionPct : 15;
+          if (c.pct !== expectedPct) {
+            c.pct = expectedPct;
+            c.monto = Math.round((l.precio * expectedPct) / 100);
+            changed = true;
+          }
+          return c;
+        });
+        if (changed) {
+          await dbPut('lavados', {...l, comisionesGrupal: newComs});
+        }
+      }
+    }
+  }
+  
   const ver = await dbCfg('version');
   if (!ver) {
     await dbCfg('version', '1.0.0');
@@ -1238,7 +1262,7 @@ async function regConfirmar() {
     }
 
     const comisionesGrupal = empleadosActivos.map(e => {
-      const pct = e.comisionPct ?? 15; // 15% por defecto si no tiene
+      const pct = svc.comisionPct !== undefined ? svc.comisionPct : (e.comisionPct ?? 15);
       return {
         empleadoId: e.id,
         nombre: e.nombre,
