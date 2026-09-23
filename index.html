@@ -1071,7 +1071,7 @@ function selVehiculo(tipo) {
     const svcs = await dbGetAll('servicios');
     svcs.filter(s => s.activo).forEach(s => {
       const card = $(`#sc-${s.id}`);
-      const isMotoSvc = s.nombre.toLowerCase().includes('moto');
+      const isMotoSvc = /\bmoto\b/i.test(s.nombre);
       if (card) {
           if (tipo === 'moto' && !isMotoSvc) card.style.display = 'none';
           else if (tipo !== 'moto' && isMotoSvc) card.style.display = 'none';
@@ -2696,7 +2696,7 @@ async function renderResStep() {
 function resCatSel(cat) {
   document.querySelectorAll('[id^=rcat-]').forEach(b=>b.classList.remove('selected'));
   const catBtn=document.getElementById('rcat-'+cat); if(catBtn) catBtn.classList.add('selected');
-  resServicio=null; _resPrecio=0; _resSvcNombre='';
+  resServicio=null; _resPrecio=0; _resPrecioMax=0; _resSvcNombre='';
   const sub=document.getElementById('resSubcat'), grid=document.getElementById('resServicioGrid');
   const ok=document.getElementById('resSig1'); if(ok) ok.disabled=true;
   // Unified: camioneta4x4 goes directly to services with dual price display
@@ -2724,9 +2724,10 @@ function resRenderServicios(vehiculo) {
   var isMoto = vehiculo === 'moto';
   var isCam4x4 = vehiculo === 'camioneta4x4';
   var excluir = ['Lavado Completo', 'Solo Exterior', 'Solo Interior'];
+  var reMotoBound = /\bmoto\b/i;
   var filtrados = isMoto
-    ? svcs.filter(function(s){ return s.nombre.toLowerCase().indexOf('moto') >= 0; })
-    : svcs.filter(function(s){ return s.nombre.toLowerCase().indexOf('moto') < 0 && excluir.indexOf(s.nombre) < 0; });
+    ? svcs.filter(function(s){ return reMotoBound.test(s.nombre); })
+    : svcs.filter(function(s){ return !reMotoBound.test(s.nombre) && excluir.indexOf(s.nombre) < 0; });
 
   var rows = filtrados.map(function(s) {
     var precio, precioDisplay, precioMax = 0;
