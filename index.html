@@ -783,7 +783,7 @@ async function renderDashboard() {
 let regCliente=null, regServicio=null, regVehiculo='auto', regEmpleado=null;
 async function renderRegistro() {
   const el = $('#view-registro');
-  const [servicios, empleados] = await Promise.all([dbGetAll('servicios'), dbGetAll('empleados')]);
+  const [servicios] = await Promise.all([dbGetAll('servicios')]);
   const user = auth.get();
   regCliente = null; regServicio = null; regVehiculo = 'auto';
   regEmpleado = user.rol === 'dueno' ? null : user;
@@ -885,17 +885,8 @@ async function renderRegistro() {
       }).join('')}
     </div>
 
-    <!-- ── PASO 5: EMPLEADO (solo dueño) ── -->
-    ${user.rol === 'dueno' ? `
-    <div class="section-head">5 · Empleado asignado</div>
-    <div class="input-group"><select class="input" id="regEmpId">
-      <option value="">— Seleccionar empleado —</option>
-      ${empleados.filter(e => e.activo).map(e => `<option value="${e.id}">${e.nombre}${e.rol==='dueno'?' 👑':''}</option>`).join('')}
-    </select></div>` : ''}
 
-    <!-- ── NOTAS ── -->
-    <div class="section-head">${user.rol === 'dueno' ? '6' : '5'} · Notas (opcional)</div>
-    <div class="input-group"><textarea class="input" id="regNotas" rows="2" maxlength="200" placeholder="Ej: quiere que laven primero las llantas..."></textarea></div>
+
 
     <!-- CONFIRMAR -->
     <button class="btn btn-primary btn-full" id="btnRegConfirmar" style="margin-top:8px" onclick="regConfirmar()">🚗 Agregar a la cola de hoy</button>
@@ -1145,10 +1136,7 @@ async function regConfirmar() {
   if (!marcaVehiculo) { toast('La marca del vehículo es obligatoria', 'error'); return; }
 
   // ── Validar empleado ─────────────────────────────────────────
-  const empId = user.rol === 'dueno'
-    ? ($('#regEmpId')?.value || user.id)
-    : user.id;
-  if (!empId) { toast('Seleccioná un empleado', 'error'); return; }
+  const empId = user.id; // Siempre el usuario logueado
 
   // Bloquear botón para evitar doble clic mientras envía a la nube
   regSubmitting = true;
