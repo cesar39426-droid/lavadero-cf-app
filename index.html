@@ -2583,11 +2583,11 @@ function cerrarSesion() {
 //  PANEL DE RESERVAS PÚBLICO
 // ═══════════════════════════════════════════════════════════════
 let resStep=1, resServicio=null, resVehiculo='auto', resFecha=null, resHora=null;
-let _resSvcs=[], _resPrecio=0, _resSvcNombre='';
+let _resSvcs=[], _resPrecio=0, _resPrecioMax=0, _resSvcNombre='';
 
 async function renderReserva() {
   resStep=1; resServicio=null; resVehiculo='auto'; resFecha=null; resHora=null;
-  _resPrecio=0; _resSvcNombre='';
+  _resPrecio=0; _resPrecioMax=0; _resSvcNombre='';
   _resSvcs = (await dbGetAll('servicios')).filter(s=>s.activo!==false);
   await renderResStep();
 }
@@ -2636,7 +2636,7 @@ async function renderResStep() {
       </div>
     `;
   } else if(resStep===3) {
-    const tipoLabel={auto:'Auto',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',moto:'Moto'}[resVehiculo]||resVehiculo;
+    const tipoLabel={auto:'Auto',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',camioneta4x4:'Camioneta / 4x4',moto:'Moto'}[resVehiculo]||resVehiculo;
     ct.innerHTML=`
       <div class="stepper">
         <div class="step done">✓</div><div class="step-line"></div>
@@ -2654,7 +2654,7 @@ async function renderResStep() {
           <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">🔧 Servicio</span><strong>${_resSvcNombre}</strong></div>
           <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">📅 Fecha</span><strong>${fdateDay(resFecha)}</strong></div>
           <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">🕐 Hora</span><strong>${resHora} hs</strong></div>
-          <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid #333;margin-top:2px"><span style="color:var(--muted)">💰 Precio</span><strong class="text-gold" style="font-size:1rem">${fmoney(_resPrecio)}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid #333;margin-top:2px"><span style="color:var(--muted)">💰 Precio</span><strong class="text-gold" style="font-size:1rem">${_resPrecioMax>0?fmoney(_resPrecio)+' / '+fmoney(_resPrecioMax):fmoney(_resPrecio)}</strong></div>
         </div>
       </div>
       <div style="display:flex;gap:10px;margin-top:8px">
@@ -2671,27 +2671,11 @@ function resCatSel(cat) {
   resServicio=null; _resPrecio=0; _resSvcNombre='';
   const sub=document.getElementById('resSubcat'), grid=document.getElementById('resServicioGrid');
   const ok=document.getElementById('resSig1'); if(ok) ok.disabled=true;
-  if(cat==='camioneta4x4') {
-    sub.style.display='block';
-    sub.innerHTML=`
-      <div class="section-head" style="margin-top:14px">¿Familiar o 4x4?</div>
-      <div class="vehicle-grid">
-        <button class="vehicle-btn" id="rsize-camioneta" onclick="resSizeSel('camioneta')">
-          <span class="icon">🚐</span><span style="font-size:.88rem;font-weight:600">Familiar</span>
-          <span style="font-size:.7rem;color:var(--muted);display:block;margin-top:2px">Kangoo, Combo, T-Cross...</span>
-        </button>
-        <button class="vehicle-btn" id="rsize-4x4" onclick="resSizeSel('4x4')">
-          <span class="icon">🚙</span><span style="font-size:.88rem;font-weight:600">Grande / 4x4</span>
-          <span style="font-size:.7rem;color:var(--muted);display:block;margin-top:2px">SUV, Pickup, Hilux, Amarok...</span>
-        </button>
-      </div>`;
-    grid.style.display='none'; grid.innerHTML='';
-  } else {
-    sub.style.display='none'; sub.innerHTML='';
-    resVehiculo=cat;
-    resRenderServicios(cat);
-    grid.style.display='block';
-  }
+  // Unified: camioneta4x4 goes directly to services with dual price display
+  sub.style.display='none'; sub.innerHTML='';
+  resVehiculo=cat; // 'auto', 'camioneta4x4', or 'moto'
+  resRenderServicios(cat);
+  grid.style.display='block';
 }
 window.resCatSel=resCatSel;
 
@@ -2728,8 +2712,8 @@ function resRenderServicios(vehiculo) {
     </div>`;
 }
 
-function resSelServicio(id,precio,nombre){
-  resServicio=id; _resPrecio=precio; _resSvcNombre=nombre;
+function resSelServicio(id,precio,precioMax,nombre){
+  resServicio=id; _resPrecio=precio; _resPrecioMax=precioMax||0; _resSvcNombre=nombre;
   document.querySelectorAll('.service-card').forEach(cd=>cd.classList.toggle('selected',cd.id===`rsc-${id}`));
   const ok=document.getElementById('resSig1'); if(ok) ok.disabled=false;
 }
@@ -2807,7 +2791,8 @@ async function resConfirmar(){
     fecha:resFecha,hora:resHora,estado:'pendiente',
     creadoEn:new Date().toISOString()
   });
-  const waMsg=encodeURIComponent(`Hola LavaderoCF! Confirmo mi turno:\n✅ ${nombre}\n📅 ${fdateDay(resFecha)}\n🕐 ${resHora} hs\n🚗 ${tipoLabel} — ${svc?.nombre||_resSvcNombre}\n💰 ${fmoney(precio)}`);
+  const precioDisplay=_resPrecioMax>0?fmoney(precio)+' / '+fmoney(_resPrecioMax):fmoney(precio);
+  const waMsg=encodeURIComponent(`Hola LavaderoCF! Confirmo mi turno:\n✅ ${nombre}\n📅 ${fdateDay(resFecha)}\n🕐 ${resHora} hs\n🚗 ${tipoLabel} — ${svc?.nombre||_resSvcNombre}\n💰 ${precioDisplay}`);
   const waUrl=`https://wa.me/543487704362?text=${waMsg}`;
   const ct=document.getElementById('reservaContent');
   if(ct) ct.innerHTML=`
@@ -2822,9 +2807,10 @@ async function resConfirmar(){
         <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🕐 Hora</span><strong>${resHora} hs</strong></div>
         <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🚗 Vehículo</span><strong>${tipoLabel}</strong></div>
         <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🔧 Servicio</span><strong>${svc?.nombre||_resSvcNombre}</strong></div>
-        <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--gold-dim)"><span style="color:var(--muted);font-size:.85rem">💰 Precio</span><strong class="text-gold" style="font-size:1.1rem">${fmoney(precio)}</strong></div>
+        <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--gold-dim)"><span style="color:var(--muted);font-size:.85rem">💰 Precio</span><strong class="text-gold" style="font-size:1.1rem">${_resPrecioMax>0?fmoney(precio)+' / '+fmoney(_resPrecioMax):fmoney(precio)}</strong></div>
       </div>
     </div>
+    ${_resPrecioMax>0?`<p style="color:var(--muted);font-size:.75rem;text-align:center;margin-bottom:8px">* El precio exacto se confirma en el local según el modelo del vehículo.</p>`:''}
     <a href="${waUrl}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;background:#25D366;color:#fff;border:none;padding:14px;border-radius:var(--r-md);font-size:.95rem;font-weight:600;text-decoration:none;margin-bottom:10px">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.117.549 4.116 1.508 5.855L0 24l6.335-1.482A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.89 0-3.663-.523-5.179-1.435l-.371-.221-3.762.88.928-3.656-.242-.377A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
       Enviarme confirmación por WhatsApp
