@@ -1,0 +1,10 @@
+{
+  "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/reservar",
+      "destination": "/#/reserva",
+      "permanent": false
+    }
+  ]
+}
