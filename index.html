@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="assets/icons/icon-192.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap&font-display=swap" rel="stylesheet"/>
 <style>
 /* ── RESET ── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -226,7 +226,7 @@ details summary::-webkit-details-marker {display:none}
   <img src="assets/logo.jpg" alt="LavaderoCF"/>
   <h1>LavaderoCF</h1>
   <p>El esplendor que tu coche merece</p>
-  <div class="splash-bar"><div class="splash-fill"></div></div>
+  <div class="splash-spinner"></div>
 </div>
 
 <!-- APP SHELL -->
@@ -2768,15 +2768,13 @@ window.addEventListener('hashchange', handleHash);
 // ═══════════════════════════════════════════════════════════════
 async function appInit() {
   try {
-    await Promise.all([dbOpen(), new Promise(r=>setTimeout(r,1600))]);
-    await seeds();
+    await dbOpen();
   } catch(e) {
-    console.error('Init error:', e);
+    console.error('DB Init error:', e);
   }
-  // Ocultar splash
+  // Ocultar splash inmediatamente
   const splash=document.getElementById('splash');
-  splash.style.opacity='0';
-  setTimeout(()=>splash.remove(), 500);
+  if (splash) { splash.style.opacity='0'; setTimeout(()=>splash.remove(), 400); }
   // Mostrar app
   document.getElementById('app').style.display='block';
   // Login o Main (Persistencia de sesión)
@@ -2786,6 +2784,8 @@ async function appInit() {
   } else {
     showScreen('login');
   }
+  // Seeds en background (no bloquea el primer render)
+  seeds().catch(e => console.warn('Seeds error:', e));
 }
 
 appInit();
