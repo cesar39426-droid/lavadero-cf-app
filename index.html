@@ -1313,7 +1313,7 @@ async function renderDia() {
                          .sort((a,b)=>a.hora.localeCompare(b.hora));
   } catch(e) { console.warn('turnos fetch failed:', e); }
 
-  el.innerHTML = _buildTurnosBanner(turnosHoy) + (false?`<div style='background:rgba(201,162,39,.08);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:12px;margin-bottom:14px'><div style='font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:8px'>🔔 TURNOS RESERVADOS HOY (${turnosHoy.length})</div>${turnosHoy.map(t=>`<div style='display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1e1e1e'><div><div style='font-weight:600;font-size:.88rem'>${t.clienteNombre}</div><div style='color:var(--muted);font-size:.75rem'>🕐 ${t.hora} hs &middot; ${t.tipoLabel||t.tipoVehiculo} &middot; ${t.servicioNombre}</div></div><button class='btn btn-primary btn-sm' onclick='confirmarTurnoLlegada("${t.id}")'>✅ Llegó</button></div>`).join('')}</div>`:'') + `
+  el.innerHTML = _buildTurnosBanner(turnosHoy) + `
     <p class="view-title">Vehículos del Día</p>
     <p class="view-sub">${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</p>
     <div class="flex-gap mb-md" style="flex-wrap:wrap">
@@ -2602,7 +2602,7 @@ async function renderReserva() {
 }
 
 async function renderResStep() {
-  const ct=$('#reservaContent'); if(!ct) return;
+  const ct=document.getElementById('reservaContent'); if(!ct) return;
   if(resStep===1) {
     ct.innerHTML=`
       <div class="stepper">
@@ -2615,60 +2615,60 @@ async function renderResStep() {
       <div class="vehicle-grid">
         <button class="vehicle-btn" id="rcat-auto" onclick="resCatSel('auto')"><span class="icon">🚗</span>Auto</button>
         <button class="vehicle-btn" id="rcat-camioneta4x4" onclick="resCatSel('camioneta4x4')"><span class="icon">🚐</span>Camioneta / 4x4</button>
-        <button class="vehicle-btn" id="rcat-moto" onclick="resCatSel('moto')"><span class="icon">🏍️</span>Moto</button>
+        <button class="vehicle-btn" id="rcat-moto" onclick="resCatSel('moto')"><span class="icon">🏍</span>Moto</button>
       </div>
       <div id="resSubcat" style="display:none"></div>
       <div id="resServicioGrid" style="display:none"></div>
-      <button class="btn btn-primary btn-full" id="resSig1" onclick="resNext()" disabled style="margin-top:16px">Siguiente →</button>
+      <button class="btn btn-primary btn-full" id="resSig1" onclick="resNext()" disabled style="margin-top:16px">Siguiente &rarr;</button>
     `;
   } else if(resStep===2) {
-    const hoy=new Date();
-    const dias=[];
-    let d=new Date(hoy);
-    while(dias.length<5){ d.setDate(d.getDate()+1); dias.push(new Date(d)); }
-    function isoDate(x){ return x.toISOString().slice(0,10); }
+    const diasArr=[];
+    let dd=new Date();
+    while(diasArr.length<5){ dd.setDate(dd.getDate()+1); diasArr.push(dd.toISOString().slice(0,10)); }
     ct.innerHTML=`
       <div class="stepper">
-        <div class="step done">✓</div><div class="step-line"></div>
+        <div class="step done">&#10003;</div><div class="step-line"></div>
         <div class="step active">2</div><div class="step-line"></div>
         <div class="step">3</div>
       </div>
       <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 2 de 3 &mdash; Elegí día y horario</p>
       <div class="section-head">Día</div>
       <div class="date-grid">
-        ${dias.map(d=>`<button class="date-btn" id="rfd-${isoDate(d)}" onclick="resSelFecha('${isoDate(d)}')">${fdateDay(isoDate(d))}</button>`).join('')}
+        ${diasArr.map(iso=>`<button class="date-btn" id="rfd-${iso}" onclick="resSelFecha('${iso}')">${fdateDay(iso)}</button>`).join('')}
       </div>
       <div id="resSlots"></div>
       <div style="display:flex;gap:10px;margin-top:16px">
-        <button class="btn btn-secondary btn-full" onclick="resStep=1;renderResStep()">← Volver</button>
-        <button class="btn btn-primary btn-full" id="resSig2" onclick="resNext()" disabled>Siguiente →</button>
+        <button class="btn btn-secondary btn-full" onclick="resStep=1;renderResStep()">&larr; Volver</button>
+        <button class="btn btn-primary btn-full" id="resSig2" onclick="resNext()" disabled>Siguiente &rarr;</button>
       </div>
     `;
   } else if(resStep===3) {
-    const tipoLabel={auto:'Auto',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',camioneta4x4:'Camioneta / 4x4',moto:'Moto'}[resVehiculo]||resVehiculo;
+    const _lbl={auto:'Auto',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',camioneta4x4:'Camioneta / 4x4',moto:'Moto'};
+    const _tl=_lbl[resVehiculo]||resVehiculo;
+    const _pr=_resPrecioMax>0?(fmoney(_resPrecio)+' / '+fmoney(_resPrecioMax)):fmoney(_resPrecio);
     ct.innerHTML=`
       <div class="stepper">
-        <div class="step done">✓</div><div class="step-line"></div>
-        <div class="step done">✓</div><div class="step-line"></div>
+        <div class="step done">&#10003;</div><div class="step-line"></div>
+        <div class="step done">&#10003;</div><div class="step-line"></div>
         <div class="step active">3</div>
       </div>
       <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 3 de 3 &mdash; Tus datos</p>
-      <div class="input-group"><label class="input-label">Nombre completo *</label><input class="input" id="resNombre" placeholder="Juan Pérez"/></div>
-      <div class="input-group"><label class="input-label">Teléfono *</label><input class="input" id="resTel" type="tel" placeholder="Ej: 3487123456" oninput="resBuscarTel()"/></div>
+      <div class="input-group"><label class="input-label">Nombre completo *</label><input class="input" id="resNombre" placeholder="Juan Perez"/></div>
+      <div class="input-group"><label class="input-label">Telefono *</label><input class="input" id="resTel" type="tel" placeholder="Ej: 3487123456" oninput="resBuscarTel()"/></div>
       <div id="resClienteDetected"></div>
       <div style="background:var(--surface2);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:14px;margin:14px 0">
         <div style="font-size:.72rem;color:var(--gold);letter-spacing:.08em;margin-bottom:8px">RESUMEN</div>
         <div style="font-size:.85rem;display:flex;flex-direction:column;gap:6px">
-          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">🚗 Vehículo</span><strong>${tipoLabel}</strong></div>
-          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">🔧 Servicio</span><strong>${_resSvcNombre}</strong></div>
-          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">📅 Fecha</span><strong>${fdateDay(resFecha)}</strong></div>
-          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">🕐 Hora</span><strong>${resHora} hs</strong></div>
-          <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid #333;margin-top:2px"><span style="color:var(--muted)">💰 Precio</span><strong class="text-gold" style="font-size:1rem">${_resPrecioMax>0?fmoney(_resPrecio)+' / '+fmoney(_resPrecioMax):fmoney(_resPrecio)}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Vehiculo</span><strong>${_tl}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Servicio</span><strong>${_resSvcNombre}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Fecha</span><strong>${fdateDay(resFecha)}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Hora</span><strong>${resHora} hs</strong></div>
+          <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid #333"><span style="color:var(--muted)">Precio</span><strong class="text-gold" style="font-size:1rem">${_pr}</strong></div>
         </div>
       </div>
       <div style="display:flex;gap:10px;margin-top:8px">
-        <button class="btn btn-secondary btn-full" onclick="resStep=2;renderResStep()">← Volver</button>
-        <button class="btn btn-primary btn-full" onclick="resConfirmar()">✅ Confirmar</button>
+        <button class="btn btn-secondary btn-full" onclick="resStep=2;renderResStep()">&larr; Volver</button>
+        <button class="btn btn-primary btn-full" onclick="resConfirmar()">Confirmar</button>
       </div>
     `;
   }
