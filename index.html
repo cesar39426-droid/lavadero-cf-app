@@ -1280,6 +1280,25 @@ window.regConfirmar = regConfirmar;
 //  VIEW: VEHÍCULOS DEL DÍA
 // ═══════════════════════════════════════════════════════════════
 let diaTimer=null;
+// Builds the reserved-turnos banner for today
+function _buildTurnosBanner(arr) {
+  if (!arr || arr.length === 0) return '';
+  const rows = arr.map(function(t) {
+    var id = String(t.id || '').replace(/"/g, '');
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1e1e1e">'
+      + '<div>'
+      + '<div style="font-weight:600;font-size:.88rem">' + (t.clienteNombre || '') + '</div>'
+      + '<div style="color:var(--muted);font-size:.75rem">'
+      + (t.hora || '') + ' hs &middot; ' + (t.tipoLabel || t.tipoVehiculo || '') + ' &middot; ' + (t.servicioNombre || '')
+      + '</div></div>'
+      + '<button class="btn btn-primary btn-sm" data-turno-id="' + id + '" onclick="confirmarTurnoLlegada(this.dataset.turnoId)">Llegó</button>'
+      + '</div>';
+  }).join('');
+  return '<div style="background:rgba(201,162,39,.08);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:12px;margin-bottom:14px">'
+    + '<div style="font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:8px">TURNOS RESERVADOS HOY (' + arr.length + ')</div>'
+    + rows + '</div>';
+}
+
 async function renderDia() {
   if (diaTimer) { clearInterval(diaTimer); diaTimer=null; }
   const el = $('#view-dia');
@@ -2699,26 +2718,41 @@ function resSizeSel(tipo) {
 window.resSizeSel=resSizeSel;
 
 function resRenderServicios(vehiculo) {
-  const grid=document.getElementById('resServicioGrid'); if(!grid) return;
-  const svcs=_resSvcs;
-  const isMoto=vehiculo==='moto';
-  const excluir=['Lavado Completo','Solo Exterior','Solo Interior'];
-  const filtrados=isMoto
-    ? svcs.filter(s=>s.nombre.toLowerCase().includes('moto'))
-    : svcs.filter(s=>!s.nombre.toLowerCase().includes('moto')&&!excluir.includes(s.nombre));
-  grid.innerHTML=`
-    <div class="section-head" style="margin-top:14px">Servicio</div>
-    <div class="services-grid">
-      ${filtrados.map(s=>{
-        const precio=vehiculo==='moto'?(s.precioMoto||s.precio):vehiculo==='camioneta'?(s.precioCamioneta||s.precio):vehiculo==='4x4'?(s.precio4x4||s.precio):(s.precioAuto||s.precio);
-        const nomSafe=s.nombre.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        return `<div class="service-card" id="rsc-${s.id}" onclick="resSelServicio('${s.id}',${precio},'${nomSafe}')">
-          <div class="service-name">${s.nombre}</div>
-          <div class="service-price">${fmoney(precio)}</div>
-          <div class="service-desc">${s.descripcion||''}</div>
-        </div>`;
-      }).join('')}
-    </div>`;
+  var grid = document.getElementById('resServicioGrid');
+  if (!grid) return;
+  var svcs = _resSvcs;
+  var isMoto = vehiculo === 'moto';
+  var isCam4x4 = vehiculo === 'camioneta4x4';
+  var excluir = ['Lavado Completo', 'Solo Exterior', 'Solo Interior'];
+  var filtrados = isMoto
+    ? svcs.filter(function(s){ return s.nombre.toLowerCase().indexOf('moto') >= 0; })
+    : svcs.filter(function(s){ return s.nombre.toLowerCase().indexOf('moto') < 0 && excluir.indexOf(s.nombre) < 0; });
+
+  var rows = filtrados.map(function(s) {
+    var precio, precioDisplay, precioMax = 0;
+    if (isMoto) {
+      precio = s.precioMoto || s.precio || 0;
+      precioDisplay = fmoney(precio);
+    } else if (isCam4x4) {
+      var pc = s.precioCamioneta || s.precio || 0;
+      var p4 = s.precio4x4 || s.precio || 0;
+      precio = pc; precioMax = p4;
+      precioDisplay = (pc === p4) ? fmoney(pc) : (fmoney(pc) + ' / ' + fmoney(p4));
+    } else {
+      precio = s.precioAuto || s.precio || 0;
+      precioDisplay = fmoney(precio);
+    }
+    var nomSafe = (s.nombre || '').replace(/'/g, "\'");
+    return '<div class="service-card" id="rsc-' + s.id + '" data-sid="' + s.id + '" data-precio="' + precio + '" data-preciomax="' + precioMax + '" data-nom="' + nomSafe + '" onclick="resSelServicio(this.dataset.sid, +this.dataset.precio, +this.dataset.preciomax, this.dataset.nom)">'
+      + '<div class="service-name">' + (s.nombre || '') + '</div>'
+      + '<div class="service-price">' + precioDisplay + '</div>'
+      + '<div class="service-desc">' + (s.descripcion || '') + '</div>'
+      + '</div>';
+  }).join('');
+
+  grid.innerHTML = '<div class="section-head" style="margin-top:14px">Servicio</div>'
+    + (isCam4x4 ? '<p style="color:var(--muted);font-size:.76rem;margin-bottom:10px">El precio varia segun el modelo. Se confirma al llegar.</p>' : '')
+    + '<div class="services-grid">' + rows + '</div>';
 }
 
 function resSelServicio(id,precio,precioMax,nombre){
