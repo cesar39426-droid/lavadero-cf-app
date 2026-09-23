@@ -2547,7 +2547,7 @@ function generarRecsLocales(lavados, clientes, costos, servicios) {
 async function renderConfig() {
   const el=$('#view-config');
   const [nombre, tel, apiKey, ver]=await Promise.all([dbCfg('nombre_negocio'),dbCfg('telefono_negocio'),dbCfg('api_key_ia'),dbCfg('version')]);
-  const url=location.origin+location.pathname;
+  const url=location.origin+'/';
   el.innerHTML=`
     <p class="view-title">Configuración</p>
     <div class="section-head">Datos del negocio</div>
