@@ -1304,7 +1304,16 @@ async function renderDia() {
     return '🚗';
   }
 
-  el.innerHTML = (turnosHoy&&turnosHoy.length>0?`<div style='background:rgba(201,162,39,.08);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:12px;margin-bottom:14px'><div style='font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:8px'>🔔 TURNOS RESERVADOS HOY (${turnosHoy.length})</div>${turnosHoy.map(t=>`<div style='display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1e1e1e'><div><div style='font-weight:600;font-size:.88rem'>${t.clienteNombre}</div><div style='color:var(--muted);font-size:.75rem'>🕐 ${t.hora} hs &middot; ${t.tipoLabel||t.tipoVehiculo} &middot; ${t.servicioNombre}</div></div><button class='btn btn-primary btn-sm' onclick='confirmarTurnoLlegada("${t.id}")'>✅ Llegó</button></div>`).join('')}</div>`:'') + `
+  // Safe: load today's reserved turnos
+  let turnosHoy = [];
+  try {
+    const allTurnos = await dbGetAll('turnos');
+    const todayStr = todayISO();
+    turnosHoy = allTurnos.filter(t=>t.fecha===todayStr && t.estado==='pendiente')
+                         .sort((a,b)=>a.hora.localeCompare(b.hora));
+  } catch(e) { console.warn('turnos fetch failed:', e); }
+
+  el.innerHTML = _buildTurnosBanner(turnosHoy) + (false?`<div style='background:rgba(201,162,39,.08);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:12px;margin-bottom:14px'><div style='font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:8px'>🔔 TURNOS RESERVADOS HOY (${turnosHoy.length})</div>${turnosHoy.map(t=>`<div style='display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1e1e1e'><div><div style='font-weight:600;font-size:.88rem'>${t.clienteNombre}</div><div style='color:var(--muted);font-size:.75rem'>🕐 ${t.hora} hs &middot; ${t.tipoLabel||t.tipoVehiculo} &middot; ${t.servicioNombre}</div></div><button class='btn btn-primary btn-sm' onclick='confirmarTurnoLlegada("${t.id}")'>✅ Llegó</button></div>`).join('')}</div>`:'') + `
     <p class="view-title">Vehículos del Día</p>
     <p class="view-sub">${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</p>
     <div class="flex-gap mb-md" style="flex-wrap:wrap">
@@ -2935,12 +2944,20 @@ async function appInit() {
   if (splash) { splash.style.opacity='0'; setTimeout(()=>splash.remove(), 400); }
   // Mostrar app
   document.getElementById('app').style.display='block';
-  // Login o Main (Persistencia de sesión)
-  await initLogin();
-  if (auth.get()) {
-    goTo('main');
+  // Chequear si el hash indica pantalla de reserva pública
+  const hash = location.hash || '#/';
+  if (hash === '#/reserva') {
+    // Pantalla pública: no requiere login
+    showScreen('reserva');
+    renderReserva();
   } else {
-    showScreen('login');
+    // Login o Main (Persistencia de sesión)
+    await initLogin();
+    if (auth.get()) {
+      goTo('main');
+    } else {
+      showScreen('login');
+    }
   }
   // Seeds en background (no bloquea el primer render)
   seeds().catch(e => console.warn('Seeds error:', e));
