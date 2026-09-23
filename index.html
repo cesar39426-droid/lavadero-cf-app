@@ -2675,6 +2675,8 @@ async function renderResStep() {
       <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 3 de 3 &mdash; Tus datos</p>
       <div class="input-group"><label class="input-label">Nombre completo *</label><input class="input" id="resNombre" placeholder="Juan Perez"/></div>
       <div class="input-group"><label class="input-label">Telefono *</label><input class="input" id="resTel" type="tel" placeholder="Ej: 3487123456" oninput="resBuscarTel()"/></div>
+      <div class="input-group"><label class="input-label">Patente *</label><input class="input" id="resPatente" placeholder="Ej: ABC 123" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"/></div>
+      <div class="input-group"><label class="input-label">Marca y modelo</label><input class="input" id="resModelo" placeholder="Ej: Toyota Corolla 2020"/></div>
       <div id="resClienteDetected"></div>
       <div style="background:var(--surface2);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:14px;margin:14px 0">
         <div style="font-size:.72rem;color:var(--gold);letter-spacing:.08em;margin-bottom:8px">RESUMEN</div>
@@ -2818,13 +2820,33 @@ function resBuscarCliente(){}
 async function resConfirmar(){
   const nombre=document.getElementById('resNombre')?.value.trim();
   const tel=document.getElementById('resTel')?.value.trim();
+  const patente=(document.getElementById('resPatente')?.value.trim()||'').toUpperCase();
+  const modelo=document.getElementById('resModelo')?.value.trim()||'';
   if(!nombre){toast('Ingresá tu nombre completo','error');return;}
   if(!tel||!/^\d{8,15}$/.test(tel)){toast('Ingresá un teléfono válido (solo números, ej: 3487123456)','error');return;}
+  if(!patente){toast('Ingresá la patente del vehículo','error');return;}
   if(!resFecha||!resHora){toast('Seleccioná día y horario','error');return;}
   if(!resServicio){toast('Seleccioná un servicio','error');return;}
   const todos=await dbGetAll('clientes');
   let cli=todos.find(x=>x.telefono===tel);
-  if(!cli) cli=await dbPut('clientes',{nombre,telefono:tel,patentes:[],marcas:[],vehiculos:[],email:'',creadoEn:new Date().toISOString()});
+  if(!cli) {
+    cli=await dbPut('clientes',{
+      nombre,telefono:tel,
+      patentes:patente?[patente]:[],
+      marcas:modelo?[modelo]:[],
+      vehiculos:patente?[{patente,marca:modelo,modelo:''}]:[],
+      email:'',creadoEn:new Date().toISOString()
+    });
+  } else {
+    // Update existing client: add patente/modelo if not already there
+    const pats = cli.patentes||[];
+    const vehs = cli.vehiculos||[];
+    if(patente && !pats.includes(patente)) {
+      pats.push(patente);
+      vehs.push({patente,marca:modelo,modelo:''});
+      await dbPut('clientes',{...cli, patentes:pats, vehiculos:vehs, marcas:[...(cli.marcas||[]), modelo].filter(Boolean)});
+    }
+  }
   const svcs=await dbGetAll('servicios');
   const svc=svcs.find(s=>s.id===resServicio);
   const precio=_resPrecio||svc?.precio||0;
@@ -2833,11 +2855,12 @@ async function resConfirmar(){
     clienteId:cli.id,clienteNombre:nombre,clienteTelefono:tel,
     servicioId:resServicio,servicioNombre:svc?.nombre||_resSvcNombre,
     tipoVehiculo:resVehiculo,tipoLabel,precio,
+    patente:patente||'',marcaVehiculo:modelo||'',
     fecha:resFecha,hora:resHora,estado:'pendiente',
     creadoEn:new Date().toISOString()
   });
   const precioDisplay=_resPrecioMax>0?fmoney(precio)+' / '+fmoney(_resPrecioMax):fmoney(precio);
-  const waMsg=encodeURIComponent(`Hola LavaderoCF! Confirmo mi turno:\n✅ ${nombre}\n📅 ${fdateDay(resFecha)}\n🕐 ${resHora} hs\n🚗 ${tipoLabel} — ${svc?.nombre||_resSvcNombre}\n💰 ${precioDisplay}`);
+  const waMsg=encodeURIComponent(`Hola LavaderoCF! Confirmo mi turno:\n✅ ${nombre}\n📅 ${fdateDay(resFecha)}\n🕐 ${resHora} hs\n🚗 ${tipoLabel} — ${svc?.nombre||_resSvcNombre}\n🔤 Patente: ${patente||"No ingresada"}\n🏷️ Modelo: ${modelo||"No ingresado"}\n💰 ${precioDisplay}`);
   const waUrl=`https://wa.me/543487704362?text=${waMsg}`;
   const ct=document.getElementById('reservaContent');
   if(ct) ct.innerHTML=`
@@ -2851,6 +2874,8 @@ async function resConfirmar(){
         <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">📅 Fecha</span><strong>${fdateDay(resFecha)}</strong></div>
         <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🕐 Hora</span><strong>${resHora} hs</strong></div>
         <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🚗 Vehículo</span><strong>${tipoLabel}</strong></div>
+        ${patente?`<div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🔤 Patente</span><strong style="font-family:monospace;letter-spacing:.05em">${patente}</strong></div>`:''}
+        ${modelo?`<div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🏷️ Modelo</span><strong>${modelo}</strong></div>`:''}
         <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🔧 Servicio</span><strong>${svc?.nombre||_resSvcNombre}</strong></div>
         <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--gold-dim)"><span style="color:var(--muted);font-size:.85rem">💰 Precio</span><strong class="text-gold" style="font-size:1.1rem">${_resPrecioMax>0?fmoney(precio)+' / '+fmoney(_resPrecioMax):fmoney(precio)}</strong></div>
       </div>
