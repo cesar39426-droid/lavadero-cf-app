@@ -624,6 +624,7 @@ function buildNav(user) {
     <div class="view" id="view-empleados"></div>
     <div class="view" id="view-servicios"></div>
     <div class="view" id="view-recordatorios"></div>
+    <div id="view-turnos" class="view"></div>
     <div class="view" id="view-ia"></div>
     <div class="view" id="view-config"></div>
   `;
@@ -634,6 +635,7 @@ function buildNav(user) {
         {id:'registro', label:'Registrar',icon:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'},
         {id:'dia',      label:'Hoy',icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'},
         {id:'clientes', label:'Clientes',icon:'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>'},
+        {id:'turnos',   label:'Turnos',    icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="10" y1="14" x2="14" y2="14"/>'},
         {id:'config',   label:'Más',icon:'<circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/>'},
       ]
     : [
@@ -680,6 +682,7 @@ async function renderView(id) {
     dashboard: renderDashboard,
     registro:  renderRegistro,
     dia:       renderDia,
+    turnos:    renderTurnos,
     clientes:  renderClientes,
     finanzas:  renderFinanzas,
     cierre:    renderCierre,
@@ -1301,7 +1304,7 @@ async function renderDia() {
     return '🚗';
   }
 
-  el.innerHTML = `
+  el.innerHTML = (turnosHoy&&turnosHoy.length>0?`<div style='background:rgba(201,162,39,.08);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:12px;margin-bottom:14px'><div style='font-size:.75rem;color:var(--gold);font-weight:600;margin-bottom:8px'>🔔 TURNOS RESERVADOS HOY (${turnosHoy.length})</div>${turnosHoy.map(t=>`<div style='display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1e1e1e'><div><div style='font-weight:600;font-size:.88rem'>${t.clienteNombre}</div><div style='color:var(--muted);font-size:.75rem'>🕐 ${t.hora} hs &middot; ${t.tipoLabel||t.tipoVehiculo} &middot; ${t.servicioNombre}</div></div><button class='btn btn-primary btn-sm' onclick='confirmarTurnoLlegada("${t.id}")'>✅ Llegó</button></div>`).join('')}</div>`:'') + `
     <p class="view-title">Vehículos del Día</p>
     <p class="view-sub">${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</p>
     <div class="flex-gap mb-md" style="flex-wrap:wrap">
@@ -2580,162 +2583,343 @@ function cerrarSesion() {
 //  PANEL DE RESERVAS PÚBLICO
 // ═══════════════════════════════════════════════════════════════
 let resStep=1, resServicio=null, resVehiculo='auto', resFecha=null, resHora=null;
+let _resSvcs=[], _resPrecio=0, _resSvcNombre='';
+
 async function renderReserva() {
   resStep=1; resServicio=null; resVehiculo='auto'; resFecha=null; resHora=null;
+  _resPrecio=0; _resSvcNombre='';
+  _resSvcs = (await dbGetAll('servicios')).filter(s=>s.activo!==false);
   await renderResStep();
 }
+
 async function renderResStep() {
   const ct=$('#reservaContent'); if(!ct) return;
-  const duraciones={auto:60,camioneta:90,'4x4':120};
   if(resStep===1) {
-    const svcs=await dbGetAll('servicios');
     ct.innerHTML=`
       <div class="stepper">
         <div class="step active">1</div><div class="step-line"></div>
         <div class="step">2</div><div class="step-line"></div>
         <div class="step">3</div>
       </div>
-      <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 1 de 3 — Elegí tu servicio</p>
-      <div class="section-head">Tipo de vehículo</div>
+      <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 1 de 3 &mdash; Elegí tu vehículo y servicio</p>
+      <div class="section-head">¿Qué tipo de vehículo traés?</div>
       <div class="vehicle-grid">
-        <button class="vehicle-btn selected" id="rvt-auto" onclick="resSelVehiculo('auto')"><span class="icon">🚗</span>Auto</button>
-        <button class="vehicle-btn" id="rvt-camioneta" onclick="resSelVehiculo('camioneta')"><span class="icon">🚐</span>Camioneta</button>
-        <button class="vehicle-btn" id="rvt-4x4" onclick="resSelVehiculo('4x4')"><span class="icon">🚙</span>4x4</button>
+        <button class="vehicle-btn" id="rcat-auto" onclick="resCatSel('auto')"><span class="icon">🚗</span>Auto</button>
+        <button class="vehicle-btn" id="rcat-camioneta4x4" onclick="resCatSel('camioneta4x4')"><span class="icon">🚐</span>Camioneta / 4x4</button>
+        <button class="vehicle-btn" id="rcat-moto" onclick="resCatSel('moto')"><span class="icon">🏍️</span>Moto</button>
       </div>
-      <div class="section-head">Servicio</div>
-      <div class="services-grid">
-        ${svcs.filter(s=>s.activo).map(s=>`<div class="service-card" id="rsc-${s.id}" onclick="resSelServicio('${s.id}')">
-          <div class="service-name">${s.nombre}</div>
-          <div class="service-price">${fmoney(s.precio)}</div>
-          <div class="service-desc">${s.descripcion||''}</div>
-        </div>`).join('')}
-      </div>
-      <button class="btn btn-primary btn-full" id="resSig1" onclick="resNext()" disabled>Siguiente →</button>
+      <div id="resSubcat" style="display:none"></div>
+      <div id="resServicioGrid" style="display:none"></div>
+      <button class="btn btn-primary btn-full" id="resSig1" onclick="resNext()" disabled style="margin-top:16px">Siguiente →</button>
     `;
   } else if(resStep===2) {
     const hoy=new Date();
     const dias=[];
     let d=new Date(hoy);
-    while(dias.length<4){ d.setDate(d.getDate()+1); dias.push(new Date(d)); }
-    const turnos=await dbGetAll('turnos');
-    const dur=duraciones[resVehiculo]||60;
-    function slots(fecha) {
-      const dom=fecha.getDay()===0;
-      const start=dom?9:8; const end=dom?16:17;
-      const list=[];
-      for(let h=start*60;h<end*60;h+=dur){
-        const hh=String(Math.floor(h/60)).padStart(2,'0');
-        const mm=String(h%60).padStart(2,'0');
-        list.push(`${hh}:${mm}`);
-      }
-      return list;
-    }
-    function isoDate(d){ return d.toISOString().slice(0,10); }
+    while(dias.length<5){ d.setDate(d.getDate()+1); dias.push(new Date(d)); }
+    function isoDate(x){ return x.toISOString().slice(0,10); }
     ct.innerHTML=`
       <div class="stepper">
         <div class="step done">✓</div><div class="step-line"></div>
         <div class="step active">2</div><div class="step-line"></div>
         <div class="step">3</div>
       </div>
-      <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 2 de 3 — Elegí día y horario</p>
+      <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 2 de 3 &mdash; Elegí día y horario</p>
       <div class="section-head">Día</div>
       <div class="date-grid">
         ${dias.map(d=>`<button class="date-btn" id="rfd-${isoDate(d)}" onclick="resSelFecha('${isoDate(d)}')">${fdateDay(isoDate(d))}</button>`).join('')}
       </div>
       <div id="resSlots"></div>
-      <button class="btn btn-secondary btn-sm mb-md" onclick="resStep=1;renderResStep()">← Volver</button>
-      <button class="btn btn-primary btn-full" id="resSig2" onclick="resNext()" disabled>Siguiente →</button>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-secondary btn-full" onclick="resStep=1;renderResStep()">← Volver</button>
+        <button class="btn btn-primary btn-full" id="resSig2" onclick="resNext()" disabled>Siguiente →</button>
+      </div>
     `;
   } else if(resStep===3) {
+    const tipoLabel={auto:'Auto',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',moto:'Moto'}[resVehiculo]||resVehiculo;
     ct.innerHTML=`
       <div class="stepper">
         <div class="step done">✓</div><div class="step-line"></div>
         <div class="step done">✓</div><div class="step-line"></div>
         <div class="step active">3</div>
       </div>
-      <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 3 de 3 — Tus datos</p>
-      <div class="input-group"><label class="input-label">Nombre completo *</label><input class="input" id="resNombre" placeholder="Juan Pérez" oninput="resBuscarCliente()"/></div>
-      <div class="input-group"><label class="input-label">Teléfono *</label><input class="input" id="resTel" type="tel" placeholder="2487123456" oninput="resBuscarTel()"/></div>
+      <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 3 de 3 &mdash; Tus datos</p>
+      <div class="input-group"><label class="input-label">Nombre completo *</label><input class="input" id="resNombre" placeholder="Juan Pérez"/></div>
+      <div class="input-group"><label class="input-label">Teléfono *</label><input class="input" id="resTel" type="tel" placeholder="Ej: 3487123456" oninput="resBuscarTel()"/></div>
       <div id="resClienteDetected"></div>
-      <button class="btn btn-secondary btn-sm mb-md" onclick="resStep=2;renderResStep()">← Volver</button>
-      <button class="btn btn-primary btn-full" onclick="resConfirmar()">✔ Confirmar reserva</button>
+      <div style="background:var(--surface2);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:14px;margin:14px 0">
+        <div style="font-size:.72rem;color:var(--gold);letter-spacing:.08em;margin-bottom:8px">RESUMEN</div>
+        <div style="font-size:.85rem;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">🚗 Vehículo</span><strong>${tipoLabel}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">🔧 Servicio</span><strong>${_resSvcNombre}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">📅 Fecha</span><strong>${fdateDay(resFecha)}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">🕐 Hora</span><strong>${resHora} hs</strong></div>
+          <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid #333;margin-top:2px"><span style="color:var(--muted)">💰 Precio</span><strong class="text-gold" style="font-size:1rem">${fmoney(_resPrecio)}</strong></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-secondary btn-full" onclick="resStep=2;renderResStep()">← Volver</button>
+        <button class="btn btn-primary btn-full" onclick="resConfirmar()">✅ Confirmar</button>
+      </div>
     `;
   }
 }
-function resSelVehiculo(tipo){
+
+function resCatSel(cat) {
+  document.querySelectorAll('[id^=rcat-]').forEach(b=>b.classList.remove('selected'));
+  const catBtn=document.getElementById('rcat-'+cat); if(catBtn) catBtn.classList.add('selected');
+  resServicio=null; _resPrecio=0; _resSvcNombre='';
+  const sub=document.getElementById('resSubcat'), grid=document.getElementById('resServicioGrid');
+  const ok=document.getElementById('resSig1'); if(ok) ok.disabled=true;
+  if(cat==='camioneta4x4') {
+    sub.style.display='block';
+    sub.innerHTML=`
+      <div class="section-head" style="margin-top:14px">¿Familiar o 4x4?</div>
+      <div class="vehicle-grid">
+        <button class="vehicle-btn" id="rsize-camioneta" onclick="resSizeSel('camioneta')">
+          <span class="icon">🚐</span><span style="font-size:.88rem;font-weight:600">Familiar</span>
+          <span style="font-size:.7rem;color:var(--muted);display:block;margin-top:2px">Kangoo, Combo, T-Cross...</span>
+        </button>
+        <button class="vehicle-btn" id="rsize-4x4" onclick="resSizeSel('4x4')">
+          <span class="icon">🚙</span><span style="font-size:.88rem;font-weight:600">Grande / 4x4</span>
+          <span style="font-size:.7rem;color:var(--muted);display:block;margin-top:2px">SUV, Pickup, Hilux, Amarok...</span>
+        </button>
+      </div>`;
+    grid.style.display='none'; grid.innerHTML='';
+  } else {
+    sub.style.display='none'; sub.innerHTML='';
+    resVehiculo=cat;
+    resRenderServicios(cat);
+    grid.style.display='block';
+  }
+}
+window.resCatSel=resCatSel;
+
+function resSizeSel(tipo) {
+  document.querySelectorAll('[id^=rsize-]').forEach(b=>b.classList.remove('selected'));
+  const btn=document.getElementById('rsize-'+tipo); if(btn) btn.classList.add('selected');
   resVehiculo=tipo;
-  ['auto','camioneta','4x4'].forEach(t=>{const b=$(`#rvt-${t}`);if(b)b.classList.toggle('selected',t===tipo);});
-  if(resServicio){const ok=$('#resSig1');if(ok)ok.disabled=false;}
+  const grid=document.getElementById('resServicioGrid');
+  resRenderServicios(tipo);
+  grid.style.display='block';
 }
-function resSelServicio(id){
-  resServicio=id;
-  $$('.service-card').forEach(c=>c.classList.toggle('selected',c.id===`rsc-${id}`));
-  const ok=$('#resSig1'); if(ok) ok.disabled=false;
+window.resSizeSel=resSizeSel;
+
+function resRenderServicios(vehiculo) {
+  const grid=document.getElementById('resServicioGrid'); if(!grid) return;
+  const svcs=_resSvcs;
+  const isMoto=vehiculo==='moto';
+  const excluir=['Lavado Completo','Solo Exterior','Solo Interior'];
+  const filtrados=isMoto
+    ? svcs.filter(s=>s.nombre.toLowerCase().includes('moto'))
+    : svcs.filter(s=>!s.nombre.toLowerCase().includes('moto')&&!excluir.includes(s.nombre));
+  grid.innerHTML=`
+    <div class="section-head" style="margin-top:14px">Servicio</div>
+    <div class="services-grid">
+      ${filtrados.map(s=>{
+        const precio=vehiculo==='moto'?(s.precioMoto||s.precio):vehiculo==='camioneta'?(s.precioCamioneta||s.precio):vehiculo==='4x4'?(s.precio4x4||s.precio):(s.precioAuto||s.precio);
+        const nomSafe=s.nombre.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        return `<div class="service-card" id="rsc-${s.id}" onclick="resSelServicio('${s.id}',${precio},'${nomSafe}')">
+          <div class="service-name">${s.nombre}</div>
+          <div class="service-price">${fmoney(precio)}</div>
+          <div class="service-desc">${s.descripcion||''}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
+
+function resSelServicio(id,precio,nombre){
+  resServicio=id; _resPrecio=precio; _resSvcNombre=nombre;
+  document.querySelectorAll('.service-card').forEach(cd=>cd.classList.toggle('selected',cd.id===`rsc-${id}`));
+  const ok=document.getElementById('resSig1'); if(ok) ok.disabled=false;
+}
+window.resSelServicio=resSelServicio;
+
 async function resSelFecha(fecha){
   resFecha=fecha; resHora=null;
-  $$('.date-btn').forEach(b=>b.classList.toggle('selected',b.id===`rfd-${fecha}`));
+  document.querySelectorAll('.date-btn').forEach(b=>b.classList.toggle('selected',b.id===`rfd-${fecha}`));
   const turnos=await dbGetAll('turnos');
-  const duraciones={auto:60,camioneta:90,'4x4':120};
-  const dur=duraciones[resVehiculo]||60;
+  const dur={auto:60,camioneta:90,'4x4':120,moto:30}[resVehiculo]||60;
   const d=new Date(fecha+'T12:00:00');
   const dom=d.getDay()===0;
-  const start=dom?9:8; const end=dom?16:17;
+  const startH=dom?9:8; const endH=dom?16:17;
   const slots=[];
-  for(let h=start*60;h<end*60;h+=dur){
+  for(let h=startH*60;h<endH*60;h+=dur){
     const hh=String(Math.floor(h/60)).padStart(2,'0');
     const mm=String(h%60).padStart(2,'0');
     slots.push(`${hh}:${mm}`);
   }
-  const ocupados=turnos.filter(t=>t.fecha===fecha&&(t.estado==='pendiente'||t.estado==='confirmado')).map(t=>t.hora);
-  const sl=$('#resSlots');
-  if(sl) sl.innerHTML=`<div class="section-head">Horario</div><div class="time-grid">${slots.map(s=>`<button class="time-btn${ocupados.includes(s)?' ':''}${ocupados.includes(s)?'" disabled':'"'} id="rt-${s}" onclick="resSelHora('${s}')">${ocupados.includes(s)?s+' ✗':s}</button>`).join('')}</div>`;
+  const ocupados=turnos.filter(t=>t.fecha===fecha&&['pendiente','confirmado'].includes(t.estado)).map(t=>t.hora);
+  const sl=document.getElementById('resSlots');
+  if(sl) sl.innerHTML=`
+    <div class="section-head" style="margin-top:14px">Horario disponible</div>
+    <div class="time-grid">
+      ${slots.map(s=>{
+        const ocu=ocupados.includes(s);
+        return `<button class="time-btn${ocu?' occupied':''}" id="rt-${s}" ${ocu?'disabled':''} onclick="${ocu?'':(`resSelHora('${s}')`)}">${ocu?s+' ✗':s}</button>`;
+      }).join('')}
+    </div>`;
 }
+window.resSelFecha=resSelFecha;
+
 function resSelHora(hora){
   resHora=hora;
-  $$('.time-btn').forEach(b=>b.classList.toggle('selected',b.id===`rt-${hora}`));
-  const ok=$('#resSig2'); if(ok) ok.disabled=false;
+  document.querySelectorAll('.time-btn').forEach(b=>b.classList.toggle('selected',b.id===`rt-${hora}`));
+  const ok=document.getElementById('resSig2'); if(ok) ok.disabled=false;
 }
+window.resSelHora=resSelHora;
+
 function resNext(){
   if(resStep===1&&resServicio) { resStep=2; renderResStep(); }
   else if(resStep===2&&resFecha&&resHora) { resStep=3; renderResStep(); }
 }
+
 async function resBuscarTel() {
-  const tel=$('#resTel')?.value.trim();
-  if(!tel||tel.length<6) return;
+  const tel=document.getElementById('resTel')?.value.trim();
+  if(!tel||tel.length<8) return;
   const todos=await dbGetAll('clientes');
-  const c=todos.find(x=>x.telefono===tel);
-  const det=$('#resClienteDetected');
-  if(det&&c) det.innerHTML=`<div class="card card-gold mt-sm" style="font-size:.85rem">✔ <strong>${c.nombre}</strong> — ya sos cliente de LavaderoCF.</div>`;
+  const cli=todos.find(x=>x.telefono===tel);
+  const det=document.getElementById('resClienteDetected');
+  if(det&&cli) det.innerHTML=`<div class="card card-gold mt-sm" style="font-size:.85rem">✔ <strong>${cli.nombre}</strong> — ya sos cliente de LavaderoCF.</div>`;
   else if(det) det.innerHTML='';
 }
-function resBuscarCliente(){} // solo por compatibilidad
+
+function resBuscarCliente(){}
+
 async function resConfirmar(){
-  const nombre=$('#resNombre')?.value.trim();
-  const tel=$('#resTel')?.value.trim();
-  if(!nombre||!tel){toast('Completá nombre y teléfono','error');return;}
+  const nombre=document.getElementById('resNombre')?.value.trim();
+  const tel=document.getElementById('resTel')?.value.trim();
+  if(!nombre){toast('Ingresá tu nombre completo','error');return;}
+  if(!tel||!/^\d{8,15}$/.test(tel)){toast('Ingresá un teléfono válido (solo números, ej: 3487123456)','error');return;}
   if(!resFecha||!resHora){toast('Seleccioná día y horario','error');return;}
+  if(!resServicio){toast('Seleccioná un servicio','error');return;}
   const todos=await dbGetAll('clientes');
-  let c=todos.find(x=>x.telefono===tel);
-  if(!c) c=await dbPut('clientes',{nombre,telefono:tel,patentes:[],email:'',creadoEn:new Date().toISOString()});
+  let cli=todos.find(x=>x.telefono===tel);
+  if(!cli) cli=await dbPut('clientes',{nombre,telefono:tel,patentes:[],marcas:[],vehiculos:[],email:'',creadoEn:new Date().toISOString()});
   const svcs=await dbGetAll('servicios');
   const svc=svcs.find(s=>s.id===resServicio);
-  await dbPut('turnos',{clienteId:c.id,clienteNombre:nombre,clienteTelefono:tel,servicioId:resServicio,servicioNombre:svc?.nombre||'',tipoVehiculo:resVehiculo,fecha:resFecha,hora:resHora,estado:'pendiente',creadoEn:new Date().toISOString()});
-  const ct=$('#reservaContent');
+  const precio=_resPrecio||svc?.precio||0;
+  const tipoLabel={auto:'Auto',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',moto:'Moto'}[resVehiculo]||resVehiculo;
+  await dbPut('turnos',{
+    clienteId:cli.id,clienteNombre:nombre,clienteTelefono:tel,
+    servicioId:resServicio,servicioNombre:svc?.nombre||_resSvcNombre,
+    tipoVehiculo:resVehiculo,tipoLabel,precio,
+    fecha:resFecha,hora:resHora,estado:'pendiente',
+    creadoEn:new Date().toISOString()
+  });
+  const waMsg=encodeURIComponent(`Hola LavaderoCF! Confirmo mi turno:\n✅ ${nombre}\n📅 ${fdateDay(resFecha)}\n🕐 ${resHora} hs\n🚗 ${tipoLabel} — ${svc?.nombre||_resSvcNombre}\n💰 ${fmoney(precio)}`);
+  const waUrl=`https://wa.me/543487704362?text=${waMsg}`;
+  const ct=document.getElementById('reservaContent');
   if(ct) ct.innerHTML=`
-    <div style="text-align:center;padding:24px 0">
-      <div style="font-size:3rem;margin-bottom:12px">✅</div>
-      <h3 class="font-serif text-gold" style="font-size:1.3rem;margin-bottom:8px">¡Turno reservado!</h3>
-      <div class="confirm-box">
-        <div class="confirm-row"><span>Servicio</span><strong>${svc?.nombre||'—'}</strong></div>
-        <div class="confirm-row"><span>Fecha</span><strong>${fdateDay(resFecha)}</strong></div>
-        <div class="confirm-row"><span>Hora</span><strong>${resHora}</strong></div>
-        <div class="confirm-row"><span>Precio</span><strong class="text-gold">${fmoney(svc?.precio||0)}</strong></div>
-      </div>
-      <button class="btn btn-primary btn-full mt-md" onclick="renderReserva()">Hacer otra reserva</button>
+    <div style="text-align:center;padding:12px 0 8px"><div style="font-size:2.5rem">🎉</div>
+      <h3 class="font-serif text-gold" style="font-size:1.2rem;margin:8px 0 4px">¡Turno confirmado!</h3>
+      <p style="color:var(--muted);font-size:.82rem">${nombre}</p>
     </div>
+    <div style="background:var(--surface);border:2px solid var(--gold);border-radius:var(--r-md);padding:16px;margin:12px 0">
+      <div style="font-size:.68rem;color:var(--gold);letter-spacing:.1em;margin-bottom:10px;text-align:center">DETALLE DE TU RESERVA</div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">📅 Fecha</span><strong>${fdateDay(resFecha)}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🕐 Hora</span><strong>${resHora} hs</strong></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🚗 Vehículo</span><strong>${tipoLabel}</strong></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:.85rem">🔧 Servicio</span><strong>${svc?.nombre||_resSvcNombre}</strong></div>
+        <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--gold-dim)"><span style="color:var(--muted);font-size:.85rem">💰 Precio</span><strong class="text-gold" style="font-size:1.1rem">${fmoney(precio)}</strong></div>
+      </div>
+    </div>
+    <a href="${waUrl}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;background:#25D366;color:#fff;border:none;padding:14px;border-radius:var(--r-md);font-size:.95rem;font-weight:600;text-decoration:none;margin-bottom:10px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.117.549 4.116 1.508 5.855L0 24l6.335-1.482A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.89 0-3.663-.523-5.179-1.435l-.371-.221-3.762.88.928-3.656-.242-.377A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+      Enviarme confirmación por WhatsApp
+    </a>
+    <button class="btn btn-secondary btn-full" onclick="renderReserva()">Hacer otra reserva</button>
   `;
 }
+
+//  VIEW: TURNOS (solo dueño)
+// ══════════════════════════════════════════════════════
+async function renderTurnos() {
+  const el=$('#view-turnos'); if(!el) return;
+  const hoy=new Date().toISOString().slice(0,10);
+  const dias=[];
+  let d=new Date(hoy+'T12:00:00');
+  for(let i=0;i<6;i++){
+    const iso=d.toISOString().slice(0,10);
+    dias.push(iso);
+    d.setDate(d.getDate()+1);
+  }
+  const todosTurnos=await dbGetAll('turnos');
+  const activos=todosTurnos.filter(t=>['pendiente','confirmado'].includes(t.estado));
+
+  el.innerHTML=`
+    <p class="view-title">📅 Turnos</p>
+    <p class="view-sub">Próximos 6 días — ${activos.length} turno${activos.length!==1?'s':''} pendiente${activos.length!==1?'s':''}</p>
+    ${dias.map(iso=>{
+      const del_dia=activos.filter(t=>t.fecha===iso).sort((a,b)=>a.hora.localeCompare(b.hora));
+      const label=fdateDay(iso)+(iso===hoy?' (Hoy)':'');
+      return `
+        <div class="section-head" style="margin-top:20px">${label}</div>
+        ${del_dia.length===0
+          ? `<div style="color:var(--muted);font-size:.82rem;padding:10px 0">Sin turnos</div>`
+          : del_dia.map(t=>`
+          <div class="card" style="border-left:3px solid var(--gold);margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div>
+                <div style="font-weight:600;font-size:.95rem">${t.clienteNombre}</div>
+                <div style="color:var(--muted);font-size:.78rem;margin-top:3px">
+                  🕐 ${t.hora} hs · ${t.tipoLabel||t.tipoVehiculo} · ${t.servicioNombre}
+                </div>
+              </div>
+              <div style="text-align:right">
+                <div class="text-gold" style="font-weight:700">${fmoney(t.precio||0)}</div>
+                <span class="chip chip-wait" style="font-size:.65rem;margin-top:4px;display:inline-block">${t.estado}</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn btn-secondary btn-sm" onclick="cancelarTurno('${t.id}')">🚫 Cancelar</button>
+              <button class="btn btn-primary btn-sm" onclick="confirmarTurnoLlegada('${t.id}')">✅ Llegó</button>
+            </div>
+          </div>`).join('')}`;
+    }).join('')}
+  `;
+}
+
+async function cancelarTurno(id) {
+  confirmModal('¿Cancelar este turno? Se notificará en el historial.', async () => {
+    const turnos=await dbGetAll('turnos');
+    const t=turnos.find(x=>x.id===id); if(!t) return;
+    await dbPut('turnos',{...t,estado:'cancelado'});
+    toast('Turno cancelado','info');
+    renderTurnos();
+  },'Cancelar turno','btn-danger');
+}
+
+async function confirmarTurnoLlegada(id) {
+  const turnos=await dbGetAll('turnos');
+  const t=turnos.find(x=>x.id===id); if(!t) return;
+  // Crear un lavado en cola a partir del turno
+  const svcs=await dbGetAll('servicios');
+  const svc=svcs.find(s=>s.id===t.servicioId);
+  const user=auth.get();
+  const emps=(await dbGetAll('empleados')).filter(e=>e.activo===true&&e.rol!=='dueno');
+  const comisionesGrupal=emps.map(e=>({
+    empleadoId:e.id, nombre:e.nombre,
+    pct:svc?.comisionPct??e.comisionPct??15,
+    monto:Math.round(((t.precio||svc?.precio||0)*(svc?.comisionPct??e.comisionPct??15))/100)
+  }));
+  await dbPut('lavados',{
+    clienteId:t.clienteId, clienteNombre:t.clienteNombre, clienteTelefono:t.clienteTelefono,
+    patente:'', marcaVehiculo:'', modeloVehiculo:'', tipoVehiculo:t.tipoVehiculo,
+    servicioId:t.servicioId, servicioNombre:t.servicioNombre,
+    empleadoId:user?.id||'', estado:'en_espera',
+    fechaInicio:new Date().toISOString(), fechaFin:null,
+    precio:t.precio||svc?.precio||0, comisionesGrupal,
+    comisionMonto:comisionesGrupal.reduce((a,c)=>a+c.monto,0),
+    notas:'Turno reservado online', origen:'reserva', turnoId:t.id
+  });
+  await dbPut('turnos',{...t,estado:'confirmado'});
+  toast('Vehículo agregado a la cola del día ✔','success');
+  navTo('dia');
+}
+window.cancelarTurno=cancelarTurno;
+window.confirmarTurnoLlegada=confirmarTurnoLlegada;
 
 // ═══════════════════════════════════════════════════════════════
 //  HASH ROUTER
