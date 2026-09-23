@@ -2559,8 +2559,9 @@ async function renderConfig() {
     <div class="input-group"><label class="input-label">Restaurar desde backup</label><input type="file" accept=".json" class="input" id="backupFile" style="padding:10px"/></div>
     <button class="btn btn-danger btn-sm mb-md" onclick="importarBackup()">⚠️ Restaurar datos</button>
     <div class="section-head">Link de reservas</div>
-    <div class="card" style="word-break:break-all;font-size:.82rem;margin-bottom:8px">${url}#/reserva</div>
-    <button class="btn btn-secondary btn-sm mb-md" onclick="navigator.clipboard.writeText('${url}#/reserva').then(()=>toast('Link copiado ✔','success'))">📋 Copiar link</button>
+    <div class="card" style="word-break:break-all;font-size:.82rem;margin-bottom:8px">${url}reservar</div>
+    <div style="font-size:.72rem;color:var(--muted);margin-bottom:8px">Compartí este link con tus clientes. Redirige directo al panel de reservas.</div>
+    <button class="btn btn-secondary btn-sm mb-md" onclick="navigator.clipboard.writeText('${url}reservar').then(()=>toast('Link copiado ✔','success'))">📋 Copiar link</button>
     <div class="hr"></div>
     <div class="flex-between">
       <span class="text-muted" style="font-size:.78rem">v${ver||'1.0.0'}</span>
