@@ -176,7 +176,21 @@ details summary::-webkit-details-marker {display:none}
 .vehicle-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
 .vehicle-btn{background:var(--surface2);border:2px solid #2a2a2a;border-radius:var(--r-md);padding:12px 8px;cursor:pointer;text-align:center;transition:border-color .2s;font-size:.82rem;font-weight:500;color:var(--text)}
 .vehicle-btn .icon{font-size:1.5rem;display:block;margin-bottom:4px}
+.vehicle-btn strong,.vehicle-btn small{display:block}
+.vehicle-btn small{color:var(--muted);font-size:.67rem;line-height:1.2;margin-top:3px}
 .vehicle-btn.selected{border-color:var(--gold);color:var(--gold)}
+.vehicle-search-container{position:relative;margin-bottom:12px}
+.vehicle-search-symbol{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:1.2rem;pointer-events:none}
+.vehicle-search-field{width:100%;padding:13px 16px 13px 40px;background:var(--surface2);border:1px solid #333;border-radius:var(--r-sm);color:var(--text);font-size:.95rem;min-height:var(--touch)}
+.vehicle-search-field:focus{outline:none;border-color:var(--gold)}
+.vehicle-suggestions-list{position:absolute;z-index:20;left:0;right:0;top:56px;background:var(--surface);border:1px solid var(--gold-dim);border-radius:var(--r-sm);overflow:hidden;box-shadow:0 10px 24px rgba(0,0,0,.35)}
+.vehicle-suggestion-row{width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;background:transparent;border:0;border-bottom:1px solid #2a2a2a;color:var(--text);text-align:left;cursor:pointer}
+.vehicle-suggestion-row:last-child{border-bottom:0}.vehicle-suggestion-row:hover,.vehicle-suggestion-row:focus{background:var(--surface2);outline:none}
+.vehicle-suggestion-row small{display:block;color:var(--muted);font-size:.7rem;margin-top:2px}
+.selected-vehicle-banner{display:flex;align-items:center;gap:10px;padding:12px;background:rgba(201,162,39,.12);border:1px solid var(--gold);border-radius:var(--r-sm);margin-bottom:12px;font-size:.85rem}
+.selected-vehicle-banner small{display:block;color:var(--muted);font-size:.72rem;margin-top:2px}.selected-vehicle-banner button{margin-left:auto;background:transparent;color:var(--gold);cursor:pointer;font-size:.72rem}
+.fallback-label{color:var(--muted);font-size:.76rem;margin-bottom:8px}
+@media(max-width:420px){.vehicle-grid{grid-template-columns:repeat(2,1fr)}}
 
 /* ── STEPPER (reservas) ── */
 .stepper{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:24px}
@@ -2612,10 +2626,15 @@ function cerrarSesion() {
 //  PANEL DE RESERVAS PÚBLICO
 // ═══════════════════════════════════════════════════════════════
 let resStep=1, resServicio=null, resVehiculo='auto', resFecha=null, resHora=null;
+let resVehiculoMarca='', resVehiculoModelo='', resVehiculoCategoria='auto';
 let _resSvcs=[], _resPrecio=0, _resPrecioMax=0, _resSvcNombre='';
+let vehicleCatalog=null;
+function resLegacyTypeForCategory(category) {
+  return {auto:'auto',familiar:'camioneta',suv:'4x4',moto:'moto'}[category] || category || 'auto';
+}
 
 async function renderReserva() {
-  resStep=1; resServicio=null; resVehiculo='auto'; resFecha=null; resHora=null;
+  resStep=1; resServicio=null; resVehiculo='auto'; resVehiculoCategoria='auto'; resVehiculoMarca=''; resVehiculoModelo=''; resFecha=null; resHora=null;
   _resPrecio=0; _resPrecioMax=0; _resSvcNombre='';
   _resSvcs = (await dbGetAll('servicios')).filter(s=>s.activo!==false);
   await renderResStep();
@@ -2631,11 +2650,20 @@ async function renderResStep() {
         <div class="step">3</div>
       </div>
       <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 1 de 3 &mdash; Elegí tu vehículo y servicio</p>
-      <div class="section-head">¿Qué tipo de vehículo traés?</div>
+      <div class="section-head">¿Qué vehículo traés?</div>
+      <p style="color:var(--muted);font-size:.78rem;margin:-4px 0 10px">Buscá marca o modelo para ver la categoría y el precio exacto.</p>
+      <div class="vehicle-search-container">
+        <span class="vehicle-search-symbol" aria-hidden="true">⌕</span>
+        <input class="vehicle-search-field" id="resVehicleSearch" type="search" autocomplete="off" placeholder="Ej: Suran, T-Cross, Hilux..." oninput="resBuscarVehiculo(this.value)"/>
+        <div id="resVehicleSuggestions" class="vehicle-suggestions-list" role="listbox"></div>
+      </div>
+      <div id="resSelectedVehicle" class="selected-vehicle-banner" style="display:none"></div>
+      <div class="fallback-label">¿No encontrás tu modelo? Elegí una categoría:</div>
       <div class="vehicle-grid">
-        <button class="vehicle-btn" id="rcat-auto" onclick="resCatSel('auto')"><span class="icon">🚗</span>Auto</button>
-        <button class="vehicle-btn" id="rcat-camioneta4x4" onclick="resCatSel('camioneta4x4')"><span class="icon">🚐</span>Camioneta / 4x4</button>
-        <button class="vehicle-btn" id="rcat-moto" onclick="resCatSel('moto')"><span class="icon">🏍</span>Moto</button>
+        <button class="vehicle-btn" id="rcat-auto" onclick="resCatSel('auto')"><span class="icon">🚗</span><strong>Auto</strong><small>Sedán / Hatchback</small></button>
+        <button class="vehicle-btn" id="rcat-familiar" onclick="resCatSel('familiar')"><span class="icon">🚙</span><strong>Familiar chico / Rural</strong><small>Suran / Weekend</small></button>
+        <button class="vehicle-btn" id="rcat-suv" onclick="resCatSel('suv')"><span class="icon">🛻</span><strong>SUV / Pick-up / 4x4</strong><small>T-Cross / CR-V / SW4</small></button>
+        <button class="vehicle-btn" id="rcat-moto" onclick="resCatSel('moto')"><span class="icon">🏍</span><strong>Moto</strong><small>Servicios existentes</small></button>
       </div>
       <div id="resSubcat" style="display:none"></div>
       <div id="resServicioGrid" style="display:none"></div>
@@ -2663,8 +2691,9 @@ async function renderResStep() {
       </div>
     `;
   } else if(resStep===3) {
-    const _lbl={auto:'Auto',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',camioneta4x4:'Camioneta / 4x4',moto:'Moto'};
+    const _lbl={auto:'Auto / Sedán / Hatchback',familiar:'Familiar chico / Rural',suv:'SUV / Crossover / Pick-up / 4x4',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',camioneta4x4:'SUV / Pick-up / 4x4',moto:'Moto'};
     const _tl=_lbl[resVehiculo]||resVehiculo;
+    const _vehicleName=resVehiculoMarca&&resVehiculoModelo?`${resVehiculoMarca} ${resVehiculoModelo}`:'Selección manual';
     const _pr=_resPrecioMax>0?(fmoney(_resPrecio)+' / '+fmoney(_resPrecioMax)):fmoney(_resPrecio);
     ct.innerHTML=`
       <div class="stepper">
@@ -2681,7 +2710,8 @@ async function renderResStep() {
       <div style="background:var(--surface2);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:14px;margin:14px 0">
         <div style="font-size:.72rem;color:var(--gold);letter-spacing:.08em;margin-bottom:8px">RESUMEN</div>
         <div style="font-size:.85rem;display:flex;flex-direction:column;gap:6px">
-          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Vehiculo</span><strong>${_tl}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Marca / modelo</span><strong>${_vehicleName}</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Categoría</span><strong>${_tl}</strong></div>
           <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Servicio</span><strong>${_resSvcNombre}</strong></div>
           <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Fecha</span><strong>${fdateDay(resFecha)}</strong></div>
           <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Hora</span><strong>${resHora} hs</strong></div>
@@ -2696,10 +2726,17 @@ async function renderResStep() {
   }
 }
 
-function resCatSel(cat) {
+function resCatSel(cat, preserveVehicle=false) {
   document.querySelectorAll('[id^=rcat-]').forEach(b=>b.classList.remove('selected'));
   const catBtn=document.getElementById('rcat-'+cat); if(catBtn) catBtn.classList.add('selected');
+  if(cat==='camioneta4x4') cat='suv';
   resServicio=null; _resPrecio=0; _resPrecioMax=0; _resSvcNombre='';
+  resVehiculoCategoria=cat;
+  if(!preserveVehicle){
+    resVehiculoMarca='';resVehiculoModelo='';
+    const search=document.getElementById('resVehicleSearch');if(search)search.value='';
+    const selected=document.getElementById('resSelectedVehicle');if(selected)selected.style.display='none';
+  }
   const sub=document.getElementById('resSubcat'), grid=document.getElementById('resServicioGrid');
   const ok=document.getElementById('resSig1'); if(ok) ok.disabled=true;
   // Unified: camioneta4x4 goes directly to services with dual price display
@@ -2709,6 +2746,39 @@ function resCatSel(cat) {
   grid.style.display='block';
 }
 window.resCatSel=resCatSel;
+
+function resBuscarVehiculo(query) {
+  const list=document.getElementById('resVehicleSuggestions');
+  if(!list||!vehicleCatalog) return;
+  const matches=vehicleCatalog.searchVehicles(query);
+  if(!query.trim()){list.innerHTML='';return;}
+  list.innerHTML=matches.length ? matches.map(v=>{
+    const meta=vehicleCatalog.getVehicleCategoryMeta(v.categoria);
+    return `<button type="button" class="vehicle-suggestion-row" role="option" onclick="resVehicleSelect('${v.id}')"><span style="font-size:1.3rem">${meta.icon}</span><span><strong>${v.marca} ${v.modelo}</strong><small>${meta.label}</small></span></button>`;
+  }).join('') : '<p style="padding:12px 14px;color:var(--muted);font-size:.75rem;margin:0">No encontramos ese modelo. Probá otra búsqueda o elegí una categoría abajo.</p>';
+}
+window.resBuscarVehiculo=resBuscarVehiculo;
+
+function resVehicleSelect(id) {
+  const vehicle=vehicleCatalog?.getVehicleById(id);
+  if(!vehicle) return;
+  resVehiculoMarca=vehicle.marca; resVehiculoModelo=vehicle.modelo;
+  const input=document.getElementById('resVehicleSearch'); if(input) input.value=`${vehicle.marca} ${vehicle.modelo}`;
+  const list=document.getElementById('resVehicleSuggestions'); if(list) list.innerHTML='';
+  const meta=vehicleCatalog.getVehicleCategoryMeta(vehicle.categoria);
+  const selected=document.getElementById('resSelectedVehicle');
+  if(selected){selected.style.display='flex';selected.innerHTML=`<span style="font-size:1.35rem">${meta.icon}</span><span><strong>${vehicle.marca} ${vehicle.modelo}</strong><small>${meta.label}</small></span><button type="button" onclick="resClearVehicle()">Cambiar</button>`;}
+  resCatSel(vehicle.categoria, true);
+}
+window.resVehicleSelect=resVehicleSelect;
+
+function resClearVehicle(){
+  resVehiculoMarca='';resVehiculoModelo='';resVehiculoCategoria='auto';
+  const input=document.getElementById('resVehicleSearch');if(input)input.value='';
+  const selected=document.getElementById('resSelectedVehicle');if(selected)selected.style.display='none';
+  resCatSel('auto');
+}
+window.resClearVehicle=resClearVehicle;
 
 function resSizeSel(tipo) {
   document.querySelectorAll('[id^=rsize-]').forEach(b=>b.classList.remove('selected'));
@@ -2737,11 +2807,9 @@ function resRenderServicios(vehiculo) {
     if (isMoto) {
       precio = s.precioMoto || s.precio || 0;
       precioDisplay = fmoney(precio);
-    } else if (isCam4x4) {
-      var pc = s.precioCamioneta || s.precio || 0;
-      var p4 = s.precio4x4 || s.precio || 0;
-      precio = pc; precioMax = p4;
-      precioDisplay = (pc === p4) ? fmoney(pc) : (fmoney(pc) + ' / ' + fmoney(p4));
+    } else if (vehicleCatalog) {
+      precio = vehicleCatalog.getServicePrice(s, vehiculo === 'camioneta4x4' ? 'suv' : vehiculo);
+      precioDisplay = fmoney(precio);
     } else {
       precio = s.precioAuto || s.precio || 0;
       precioDisplay = fmoney(precio);
@@ -2755,7 +2823,7 @@ function resRenderServicios(vehiculo) {
   }).join('');
 
   grid.innerHTML = '<div class="section-head" style="margin-top:14px">Servicio</div>'
-    + (isCam4x4 ? '<p style="color:var(--muted);font-size:.76rem;margin-bottom:10px">El precio varia segun el modelo. Se confirma al llegar.</p>' : '')
+    + '<p style="color:var(--muted);font-size:.76rem;margin-bottom:10px">Precio final según la categoría seleccionada.</p>'
     + '<div class="services-grid">' + rows + '</div>';
 }
 
@@ -2770,7 +2838,7 @@ async function resSelFecha(fecha){
   resFecha=fecha; resHora=null;
   document.querySelectorAll('.date-btn').forEach(b=>b.classList.toggle('selected',b.id===`rfd-${fecha}`));
   const turnos=await dbGetAll('turnos');
-  const dur={auto:60,camioneta:90,'4x4':120,moto:30}[resVehiculo]||60;
+  const dur={auto:60,familiar:90,suv:120,camioneta:90,'4x4':120,camioneta4x4:120,moto:30}[resVehiculo]||60;
   const d=new Date(fecha+'T12:00:00');
   const dom=d.getDay()===0;
   const startH=dom?9:8; const endH=dom?16:17;
@@ -2821,7 +2889,8 @@ async function resConfirmar(){
   const nombre=document.getElementById('resNombre')?.value.trim();
   const tel=document.getElementById('resTel')?.value.trim();
   const patente=(document.getElementById('resPatente')?.value.trim()||'').toUpperCase();
-  const modelo=document.getElementById('resModelo')?.value.trim()||'';
+  const modeloIngresado=document.getElementById('resModelo')?.value.trim()||'';
+  const modelo=modeloIngresado || [resVehiculoMarca,resVehiculoModelo].filter(Boolean).join(' ');
   if(!nombre){toast('Ingresá tu nombre completo','error');return;}
   if(!tel||!/^\d{8,15}$/.test(tel)){toast('Ingresá un teléfono válido (solo números, ej: 3487123456)','error');return;}
   if(!patente){toast('Ingresá la patente del vehículo','error');return;}
@@ -2850,11 +2919,12 @@ async function resConfirmar(){
   const svcs=await dbGetAll('servicios');
   const svc=svcs.find(s=>s.id===resServicio);
   const precio=_resPrecio||svc?.precio||0;
-  const tipoLabel={auto:'Auto',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',moto:'Moto'}[resVehiculo]||resVehiculo;
+  const tipoLabel={auto:'Auto / Sedán / Hatchback',familiar:'Familiar chico / Rural',suv:'SUV / Crossover / Pick-up / 4x4',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',moto:'Moto'}[resVehiculo]||resVehiculo;
   await dbPut('turnos',{
     clienteId:cli.id,clienteNombre:nombre,clienteTelefono:tel,
     servicioId:resServicio,servicioNombre:svc?.nombre||_resSvcNombre,
-    tipoVehiculo:resVehiculo,tipoLabel,precio,
+    tipoVehiculo:resLegacyTypeForCategory(resVehiculoCategoria),tipoLabel,vehiculoCategoria:resVehiculoCategoria,
+    vehiculoMarca:resVehiculoMarca||'',vehiculoModelo:resVehiculoModelo||'',precio,
     patente:patente||'',marcaVehiculo:modelo||'',
     fecha:resFecha,hora:resHora,estado:'pendiente',
     creadoEn:new Date().toISOString()
@@ -2962,7 +3032,7 @@ async function confirmarTurnoLlegada(id) {
   }));
   await dbPut('lavados',{
     clienteId:t.clienteId, clienteNombre:t.clienteNombre, clienteTelefono:t.clienteTelefono,
-    patente:'', marcaVehiculo:'', modeloVehiculo:'', tipoVehiculo:t.tipoVehiculo,
+    patente:t.patente||'', marcaVehiculo:t.vehiculoMarca||t.marcaVehiculo||'', modeloVehiculo:t.vehiculoModelo||t.modeloVehiculo||'', tipoVehiculo:t.tipoVehiculo, vehiculoCategoria:t.vehiculoCategoria||'',
     servicioId:t.servicioId, servicioNombre:t.servicioNombre,
     empleadoId:user?.id||'', estado:'en_espera',
     fechaInicio:new Date().toISOString(), fechaFin:null,
@@ -2996,9 +3066,12 @@ window.addEventListener('hashchange', handleHash);
 // ═══════════════════════════════════════════════════════════════
 async function appInit() {
   try {
-    await dbOpen();
+    [vehicleCatalog] = await Promise.all([
+      import('./js/data/vehiculos.js'),
+      dbOpen()
+    ]);
   } catch(e) {
-    console.error('DB Init error:', e);
+    console.error('App initialization error:', e);
   }
   // Ocultar splash inmediatamente
   const splash=document.getElementById('splash');

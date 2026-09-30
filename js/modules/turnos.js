@@ -1,6 +1,16 @@
 import { db } from '../db/db.js';
 import { formatMoney, formatDate, getTimeSlots, isSunday, getNextAvailableDays } from '../utils/format.js';
 import { downloadICS } from '../utils/calendar.js';
+import {
+    VEHICLE_CATEGORIES,
+    VEHICLE_CATEGORY_META,
+    categoryFromLegacyType,
+    formatVehicleName,
+    getServicePrice,
+    getVehicleCategoryMeta,
+    legacyTypeForCategory,
+    searchVehicles
+} from '../data/vehiculos.js';
 
 let currentStep = 1;
 let currentContainer = null;
@@ -10,6 +20,9 @@ let bookingData = {
     servicioId: null,
     servicioNombre: '',
     tipoVehiculo: null,
+    vehiculoMarca: '',
+    vehiculoModelo: '',
+    vehiculoCategoria: null,
     fecha: null,
     hora: null,
     clienteId: null,
@@ -80,6 +93,9 @@ function resetBookingData() {
         servicioId: null,
         servicioNombre: '',
         tipoVehiculo: null,
+        vehiculoMarca: '',
+        vehiculoModelo: '',
+        vehiculoCategoria: null,
         fecha: null,
         hora: null,
         clienteId: null,
@@ -123,30 +139,53 @@ async function renderStep1() {
         ];
     }
 
+    const selectedCategory = bookingData.vehiculoCategoria || categoryFromLegacyType(bookingData.tipoVehiculo);
+    bookingData.vehiculoCategoria = bookingData.tipoVehiculo ? selectedCategory : null;
+    const categoryMeta = bookingData.vehiculoCategoria ? getVehicleCategoryMeta(bookingData.vehiculoCategoria) : null;
+    const selectedVehicleLabel = bookingData.vehiculoMarca && bookingData.vehiculoModelo
+        ? `${bookingData.vehiculoMarca} ${bookingData.vehiculoModelo}`
+        : '';
+
     let html = `
         <div class="vehiculo-selector">
-            <h3>Tipo de Vehículo</h3>
-            <div class="vehiculo-options">
-                <button class="btn-vehiculo ${bookingData.tipoVehiculo === 'Auto' ? 'selected' : ''}" data-tipo="Auto">🚗 Auto</button>
-                <button class="btn-vehiculo ${bookingData.tipoVehiculo === 'Camioneta-Familiar' ? 'selected' : ''}" data-tipo="Camioneta-Familiar">🚙 Familiar</button>
-                <button class="btn-vehiculo ${bookingData.tipoVehiculo === '4x4' ? 'selected' : ''}" data-tipo="4x4">🛻 4x4</button>
+            <h3>¿Qué vehículo vas a traer?</h3>
+            <p class="selector-help">Buscá marca o modelo para calcular el precio exacto.</p>
+            <div class="vehicle-search-wrap">
+                <span class="vehicle-search-icon" aria-hidden="true">⌕</span>
+                <input id="vehicle-search" class="vehicle-search-input" type="search" autocomplete="off"
+                    placeholder="Ej: Suran, T-Cross, Hilux..." value="${selectedVehicleLabel}">
+                <div id="vehicle-suggestions" class="vehicle-suggestions" role="listbox" aria-label="Vehículos sugeridos"></div>
             </div>
+            <div id="selected-vehicle" class="selected-vehicle" ${selectedVehicleLabel ? '' : 'hidden'}>
+                <span class="selected-vehicle-icon">${categoryMeta?.icon || '🚗'}</span>
+                <span><strong>${selectedVehicleLabel || 'Vehículo seleccionado'}</strong><small>${categoryMeta?.label || ''}</small></span>
+                <button type="button" id="clear-vehicle" class="clear-vehicle" aria-label="Cambiar vehículo">Cambiar</button>
+            </div>
+            <div class="fallback-heading">¿No encontrás tu modelo? Elegí la categoría:</div>
+            <div class="vehiculo-options">
+                ${Object.entries(VEHICLE_CATEGORY_META).map(([category, meta]) => `
+                    <button type="button" class="btn-vehiculo ${bookingData.vehiculoCategoria === category && !selectedVehicleLabel ? 'selected' : ''}" data-category="${category}">
+                        <span class="vehicle-card-icon">${meta.icon}</span><strong>${meta.shortLabel}</strong><small>${meta.label.replace(meta.shortLabel, '').replace(/^ \/ /, '')}</small>
+                    </button>
+                `).join('')}
+            </div>
+            <p id="vehicle-selection-hint" class="vehicle-selection-hint">Seleccioná un vehículo o una categoría para continuar.</p>
         </div>
         
         <div class="servicio-selector">
             <h3>Seleccioná el Servicio</h3>
             <div class="servicio-list">
-                ${servicios.map(s => `
-                    <div class="card-servicio ${bookingData.servicioId === s.id ? 'selected' : ''}" data-id="${s.id}" data-nombre="${s.nombre}" data-precio="${s.precio}">
+                ${servicios.map(s => {
+                    const price = getServicePrice(s, bookingData.vehiculoCategoria);
+                    return `
+                    <div class="card-servicio ${bookingData.servicioId === s.id ? 'selected' : ''}" data-id="${s.id}" data-nombre="${s.nombre}" data-precio="${price}">
                         <div class="servicio-info">
                             <h4>${s.nombre}</h4>
-                            <p>${s.descripcion || ''}</p>
+                            <p>${s.descripcion || s.desc || ''}</p>
                         </div>
-                        <div class="servicio-precio">
-                            ${formatMoney ? formatMoney(s.precio) : '$' + s.precio}
-                        </div>
-                    </div>
-                `).join('')}
+                        <div class="servicio-precio">${bookingData.vehiculoCategoria ? formatMoney(price) : 'Elegí vehículo'}</div>
+                    </div>`;
+                }).join('')}
             </div>
         </div>
 
@@ -157,15 +196,56 @@ async function renderStep1() {
 
     // Event Listeners Step 1
     const checkStep1Complete = () => {
-        document.getElementById('btn-next-1').disabled = !(bookingData.tipoVehiculo && bookingData.servicioId);
+        document.getElementById('btn-next-1').disabled = !(bookingData.vehiculoCategoria && bookingData.servicioId);
+        const hint = document.getElementById('vehicle-selection-hint');
+        if (hint) hint.textContent = bookingData.vehiculoCategoria
+            ? `Categoría: ${getVehicleCategoryMeta(bookingData.vehiculoCategoria).label}. Los precios se actualizaron.`
+            : 'Seleccioná un vehículo o una categoría para continuar.';
     };
+
+    const selectCategory = (category, vehicle = null) => {
+        bookingData.vehiculoCategoria = category;
+        bookingData.tipoVehiculo = legacyTypeForCategory(category);
+        bookingData.vehiculoMarca = vehicle?.marca || '';
+        bookingData.vehiculoModelo = vehicle?.modelo || '';
+        if (bookingData.servicioId) {
+            const service = servicios.find(s => s.id === bookingData.servicioId);
+            if (service) bookingData.precio = getServicePrice(service, category);
+        }
+        renderStep1();
+    };
+
+    const searchInput = document.getElementById('vehicle-search');
+    const suggestions = document.getElementById('vehicle-suggestions');
+    const renderSuggestions = () => {
+        const matches = searchVehicles(searchInput.value);
+        suggestions.innerHTML = matches.length ? matches.map(vehicle => `
+            <button type="button" class="vehicle-suggestion" data-vehicle-id="${vehicle.id}" role="option">
+                <span>${getVehicleCategoryMeta(vehicle.categoria).icon}</span>
+                <span><strong>${vehicle.marca} ${vehicle.modelo}</strong><small>${getVehicleCategoryMeta(vehicle.categoria).label}</small></span>
+            </button>
+        `).join('') : (searchInput.value.trim() ? '<p class="no-vehicle-results">No encontramos ese modelo. Probá con otra búsqueda o elegí una categoría abajo.</p>' : '');
+        suggestions.hidden = !searchInput.value.trim();
+        suggestions.querySelectorAll('.vehicle-suggestion').forEach(button => {
+            button.addEventListener('click', () => {
+                const vehicle = searchVehicles(searchInput.value).find(item => item.id === button.dataset.vehicleId);
+                if (vehicle) selectCategory(vehicle.categoria, vehicle);
+            });
+        });
+    };
+    searchInput.addEventListener('input', renderSuggestions);
+    searchInput.addEventListener('focus', renderSuggestions);
+    document.getElementById('clear-vehicle')?.addEventListener('click', () => {
+        bookingData.vehiculoMarca = '';
+        bookingData.vehiculoModelo = '';
+        bookingData.vehiculoCategoria = null;
+        bookingData.tipoVehiculo = null;
+        renderStep1();
+    });
 
     container.querySelectorAll('.btn-vehiculo').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            container.querySelectorAll('.btn-vehiculo').forEach(b => b.classList.remove('selected'));
-            e.currentTarget.classList.add('selected');
-            bookingData.tipoVehiculo = e.currentTarget.dataset.tipo;
-            checkStep1Complete();
+            selectCategory(e.currentTarget.dataset.category);
         });
     });
 
@@ -176,7 +256,8 @@ async function renderStep1() {
             target.classList.add('selected');
             bookingData.servicioId = Number(target.dataset.id);
             bookingData.servicioNombre = target.dataset.nombre;
-            bookingData.precio = Number(target.dataset.precio);
+            const service = servicios.find(s => s.id === bookingData.servicioId);
+            bookingData.precio = getServicePrice(service, bookingData.vehiculoCategoria);
             checkStep1Complete();
         });
     });
@@ -263,8 +344,10 @@ async function updateHorarios() {
     // Obtener turnos existentes para esa fecha
     let turnosDelDia = [];
     try {
-        const todosLosTurnos = await db.getAll('turnos');
-        turnosDelDia = todosLosTurnos.filter(t => t.fecha === bookingData.fecha && t.estado !== 'cancelado');
+        const turnos = typeof db.getTurnosByFecha === 'function'
+            ? await db.getTurnosByFecha(bookingData.fecha)
+            : await db.getAll('turnos');
+        turnosDelDia = turnos.filter(t => t.fecha === bookingData.fecha && t.estado !== 'cancelado');
     } catch (e) {
         console.error("No se pudieron cargar turnos del día", e);
     }
@@ -340,7 +423,9 @@ async function renderStep3() {
         
         <div class="resumen-reserva">
             <h4>Resumen</h4>
-            <p><strong>Servicio:</strong> ${bookingData.servicioNombre} (${bookingData.tipoVehiculo})</p>
+            <p><strong>Vehículo:</strong> ${formatVehicleName(bookingData.vehiculoMarca && bookingData.vehiculoModelo ? { marca: bookingData.vehiculoMarca, modelo: bookingData.vehiculoModelo } : null)}</p>
+            <p><strong>Categoría:</strong> ${getVehicleCategoryMeta(bookingData.vehiculoCategoria || categoryFromLegacyType(bookingData.tipoVehiculo)).label}</p>
+            <p><strong>Servicio:</strong> ${bookingData.servicioNombre || 'Lavado seleccionado'}</p>
             <p><strong>Día:</strong> ${formatDate ? formatDate(bookingData.fecha) : bookingData.fecha} a las ${bookingData.hora}</p>
             <p><strong>Total a pagar:</strong> ${formatMoney ? formatMoney(bookingData.precio) : '$' + bookingData.precio}</p>
         </div>
@@ -435,6 +520,9 @@ async function procesarReserva() {
             clienteTelefono: bookingData.clienteTelefono,
             servicioId: bookingData.servicioId,
             tipoVehiculo: bookingData.tipoVehiculo,
+            vehiculoMarca: bookingData.vehiculoMarca,
+            vehiculoModelo: bookingData.vehiculoModelo,
+            vehiculoCategoria: bookingData.vehiculoCategoria,
             fecha: bookingData.fecha,
             hora: bookingData.hora,
             estado: 'pendiente',
@@ -467,7 +555,9 @@ async function renderSuccess() {
             <div class="check-icon">✓</div>
             <h2>¡Tu turno está reservado!</h2>
             <div class="resumen-final">
-                <p><strong>Servicio:</strong> ${bookingData.servicioNombre} (${bookingData.tipoVehiculo})</p>
+                <p><strong>Vehículo:</strong> ${formatVehicleName(bookingData.vehiculoMarca && bookingData.vehiculoModelo ? { marca: bookingData.vehiculoMarca, modelo: bookingData.vehiculoModelo } : null)}</p>
+                <p><strong>Categoría:</strong> ${getVehicleCategoryMeta(bookingData.vehiculoCategoria || categoryFromLegacyType(bookingData.tipoVehiculo)).label}</p>
+                <p><strong>Servicio:</strong> ${bookingData.servicioNombre || 'Lavado seleccionado'}</p>
                 <p><strong>Día:</strong> ${formatDate ? formatDate(bookingData.fecha) : bookingData.fecha}</p>
                 <p><strong>Hora:</strong> ${bookingData.hora}</p>
                 <p><strong>Total:</strong> ${formatMoney ? formatMoney(bookingData.precio) : '$' + bookingData.precio}</p>
@@ -567,6 +657,45 @@ function injectStyles() {
         .vehiculo-selector, .servicio-selector, .dias-selector, .horarios-selector {
             margin-bottom: 24px;
         }
+        .selector-help, .vehicle-selection-hint {
+            color: #aaa;
+            font-size: 13px;
+            margin: -8px 0 14px;
+        }
+        .vehicle-search-wrap { position: relative; margin-bottom: 12px; }
+        .vehicle-search-icon {
+            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+            color: #aaa; font-size: 20px; pointer-events: none;
+        }
+        .vehicle-search-input {
+            width: 100%; min-height: 52px; padding: 14px 16px 14px 42px;
+            background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
+            color: #f5f0e8; font-size: 16px; box-sizing: border-box;
+        }
+        .vehicle-search-input:focus { outline: none; border-color: #c9a227; }
+        .vehicle-suggestions {
+            position: absolute; z-index: 5; left: 0; right: 0; top: 56px;
+            background: #1a1a1a; border: 1px solid #c9a227; border-radius: 8px;
+            overflow: hidden; box-shadow: 0 10px 24px rgba(0,0,0,.35);
+        }
+        .vehicle-suggestion {
+            width: 100%; display: flex; gap: 10px; align-items: center; text-align: left;
+            padding: 12px 14px; background: transparent; color: #f5f0e8;
+            border: 0; border-bottom: 1px solid #333; cursor: pointer;
+        }
+        .vehicle-suggestion:last-child { border-bottom: 0; }
+        .vehicle-suggestion:hover, .vehicle-suggestion:focus { background: #252525; outline: none; }
+        .vehicle-suggestion strong, .vehicle-suggestion small, .selected-vehicle small { display: block; }
+        .vehicle-suggestion small, .selected-vehicle small { color: #aaa; font-size: 12px; margin-top: 2px; }
+        .no-vehicle-results { padding: 12px 14px; color: #aaa; font-size: 13px; line-height: 1.4; margin: 0; }
+        .selected-vehicle {
+            display: flex; align-items: center; gap: 10px; padding: 12px;
+            background: rgba(201,162,39,.12); border: 1px solid #c9a227; border-radius: 8px; margin-bottom: 14px;
+        }
+        .selected-vehicle[hidden] { display: none; }
+        .selected-vehicle-icon { font-size: 25px; }
+        .clear-vehicle { margin-left: auto; background: transparent; color: #c9a227; font-size: 12px; cursor: pointer; }
+        .fallback-heading { color: #ccc; font-size: 13px; margin-bottom: 8px; }
         h3 {
             font-size: 18px;
             margin-bottom: 16px;
@@ -592,6 +721,10 @@ function injectStyles() {
             align-items: center;
             justify-content: center;
         }
+        .btn-vehiculo { flex-direction: column; gap: 4px; text-align: center; }
+        .btn-vehiculo strong { font-size: 13px; }
+        .btn-vehiculo small { color: #aaa; font-size: 11px; line-height: 1.2; }
+        .vehicle-card-icon { font-size: 24px; }
         .dias-tabs {
             display: flex;
             gap: 8px;

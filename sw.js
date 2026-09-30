@@ -4,7 +4,7 @@
  * Versión: 1.0.0
  */
 
-const CACHE_VERSION = 'lavaderocf-v1.3.0';
+const CACHE_VERSION = 'lavaderocf-v1.4.0';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 
@@ -37,6 +37,7 @@ const STATIC_ASSETS = [
   '/js/modules/recordatorios.js',
   '/js/modules/configuracion.js',
   '/js/modules/ia.js',
+  '/js/data/vehiculos.js',
   '/js/utils/format.js',
   '/js/utils/csv.js',
   '/js/utils/whatsapp.js',
