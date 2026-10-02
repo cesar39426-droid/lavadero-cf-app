@@ -20,6 +20,8 @@
 9. **Reserva pública:** permite `Lavado Completo`, muestra el beneficio si corresponde, revalida disponibilidad antes de guardar y comunica un conflicto concurrente sin duplicar la reserva.
 10. **Datos comerciales:** Premium y Lavado de Motor incluyen limpieza y desinfección con máquina de vapor sin alterar precios.
 11. **Caché:** `CACHE_VERSION` pasa a `lavaderocf-v1.5.0`, con comentario consistente y solo los módulos del runtime canónico.
+12. **Cliente y día de lavado:** al reservar, se busca por teléfono; si no existe se crea en `clientes`, y si ya existe se reutiliza su `clienteId` sin crear otra ficha. El turno conserva nombre, teléfono, patente y vehículo, aparece en `Turnos` para su fecha y, cuando llega el día, aparece en `Vehículos del Día` como “Ingresar al día”; al ingresarlo queda en espera con la acción `Iniciar`.
+13. **Edición concurrente:** las transacciones leen el turno vigente dentro de Firestore y calculan los bloqueos desde ese documento. Una llegada que detecta una edición simultánea no revierte datos: informa al dueño y le pide revisar la agenda.
 
 ## Evidencia de validación
 

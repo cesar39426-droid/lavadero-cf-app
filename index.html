@@ -463,12 +463,20 @@ async function dbPutTurnoAtomico(rec, { previous = null, releaseLocks = false } 
   if (!bookingRules) throw new Error('Booking rules not loaded');
   const db = await dbOpen();
   const { doc, runTransaction } = window._fb;
-  const turno = rec.id ? rec : { ...rec, id: uuid() };
-  const nextKeys = releaseLocks ? [] : bookingRules.slotLockKeys(turno);
-  const previousKeys = previous ? bookingRules.slotLockKeys(previous) : [];
-  const keys = [...new Set([...nextKeys, ...previousKeys])];
+  const turno = rec.id ? { ...rec } : { ...rec, id: uuid() };
+  const patch = previous
+    ? Object.fromEntries(Object.entries(turno).filter(([key, value]) => key !== 'id' && value !== previous[key]))
+    : turno;
+  const turnoRef = doc(db, 'turnos', String(turno.id));
 
   return runTransaction(db, async tx => {
+    const currentSnap = await tx.get(turnoRef);
+    const currentTurno = currentSnap.exists() ? { ...currentSnap.data(), id: currentSnap.id } : null;
+    const baseTurno = currentTurno || { ...turno };
+    const nextTurno = { ...baseTurno, ...patch, id: turno.id };
+    const previousKeys = currentTurno ? bookingRules.slotLockKeys(currentTurno) : [];
+    const nextKeys = releaseLocks ? [] : bookingRules.slotLockKeys(nextTurno);
+    const keys = [...new Set([...nextKeys, ...previousKeys])];
     const snapshots = new Map();
     for (const key of keys) {
       snapshots.set(key, await tx.get(doc(db, 'turnoBloqueos', key)));
@@ -483,11 +491,11 @@ async function dbPutTurnoAtomico(rec, { previous = null, releaseLocks = false } 
       }
     }
 
-    tx.set(doc(db, 'turnos', String(turno.id)), turno);
+    tx.set(turnoRef, nextTurno);
     for (const key of previousKeys) {
       if (!nextKeys.includes(key)) {
         const snap = snapshots.get(key);
-        if (snap?.exists() && String(snap.data().turnoId) === String(previous.id)) {
+        if (snap?.exists() && String(snap.data().turnoId) === String(nextTurno.id)) {
           tx.delete(doc(db, 'turnoBloqueos', key));
         }
       }
@@ -495,13 +503,13 @@ async function dbPutTurnoAtomico(rec, { previous = null, releaseLocks = false } 
     for (const key of nextKeys) {
       tx.set(doc(db, 'turnoBloqueos', key), {
         turnoId: turno.id,
-        fecha: turno.fecha,
-        hora: turno.hora,
-        duracionMinutos: turno.duracionMinutos,
+        fecha: nextTurno.fecha,
+        hora: nextTurno.hora,
+        duracionMinutos: nextTurno.duracionMinutos,
         updatedAt: new Date().toISOString()
       });
     }
-    return turno;
+    return nextTurno;
   });
 }
 
@@ -512,16 +520,23 @@ async function dbConvertTurnoAtomico(turno, lavado) {
   const turnoRef = doc(db, 'turnos', String(turno.id));
   const lavadoRecord = lavado.id ? lavado : { ...lavado, id: `turno-${turno.id}` };
   const lavadoRef = doc(db, 'lavados', String(lavadoRecord.id));
-  const lockKeys = bookingRules.slotLockKeys(turno);
 
   return runTransaction(db, async tx => {
     const turnoSnap = await tx.get(turnoRef);
     const lavadoSnap = await tx.get(lavadoRef);
+    const currentTurno = turnoSnap.exists() ? { ...turnoSnap.data(), id: turnoSnap.id } : { ...turno };
+    const comparableKeys = ['clienteId','clienteNombre','clienteTelefono','servicioId','servicioNombre','tipoVehiculo','vehiculoCategoria','vehiculoMarca','vehiculoModelo','patente','fecha','hora','duracionMinutos'];
+    const changedWhileArriving = comparableKeys.some(key => String(currentTurno[key] ?? '') !== String(turno[key] ?? ''));
+    if (changedWhileArriving) {
+      const error = new Error('TURN_CHANGED_RETRY');
+      error.code = 'TURN_CHANGED_RETRY';
+      throw error;
+    }
+    const lockKeys = bookingRules.slotLockKeys(currentTurno);
     const lockSnapshots = new Map();
     for (const key of lockKeys) {
       lockSnapshots.set(key, await tx.get(doc(db, 'turnoBloqueos', key)));
     }
-    const currentTurno = turnoSnap.exists() ? turnoSnap.data() : turno;
     if (lavadoSnap.exists() || currentTurno.estado === 'ingresado') {
       const error = new Error('TURN_ALREADY_INGRESADO');
       error.code = 'TURN_ALREADY_INGRESADO';
@@ -533,7 +548,7 @@ async function dbConvertTurnoAtomico(turno, lavado) {
       throw error;
     }
     tx.set(lavadoRef, lavadoRecord);
-    tx.set(turnoRef, { ...currentTurno, ...turno, estado:'ingresado', ingresadoEn:new Date().toISOString() });
+    tx.set(turnoRef, { ...currentTurno, estado:'ingresado', ingresadoEn:new Date().toISOString() });
     for (const key of lockKeys) {
       const snap = lockSnapshots.get(key);
       if (snap?.exists() && String(snap.data().turnoId) === String(turno.id)) {
@@ -1451,11 +1466,11 @@ function _buildTurnosBanner(arr) {
     var id = String(t.id || '').replace(/"/g, '');
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1e1e1e">'
       + '<div>'
-      + '<div style="font-weight:600;font-size:.88rem">' + (t.clienteNombre || '') + '</div>'
+      + '<div style="font-weight:600;font-size:.88rem">' + esc(t.clienteNombre || '') + '</div>'
       + '<div style="color:var(--muted);font-size:.75rem">'
-      + (t.hora || '') + ' hs &middot; ' + (t.tipoLabel || t.tipoVehiculo || '') + ' &middot; ' + (t.servicioNombre || '')
+      + esc(t.hora || '') + ' hs &middot; ' + esc(t.tipoLabel || t.tipoVehiculo || '') + ' &middot; ' + esc(t.servicioNombre || '') + ' &middot; 🚗 ' + esc(t.patente || 'Sin patente')
       + '</div></div>'
-      + '<button class="btn btn-primary btn-sm" data-turno-id="' + id + '" onclick="confirmarTurnoLlegada(this.dataset.turnoId)">Llegó</button>'
+      + '<button class="btn btn-primary btn-sm" data-turno-id="' + id + '" onclick="confirmarTurnoLlegada(this.dataset.turnoId)">Ingresar al día</button>'
       + '</div>';
   }).join('');
   return '<div style="background:rgba(201,162,39,.08);border:1px solid var(--gold-dim);border-radius:var(--r-md);padding:12px;margin-bottom:14px">'
@@ -1870,6 +1885,7 @@ async function procesarCSV() {
     if(!nombre||!tel){continue;}
     if(existentes.some(c=>c.telefono===tel)){dup++;continue;}
     await dbPut('clientes',{nombre,telefono:tel,patentes:pat?[pat]:[],email:'',creadoEn:new Date().toISOString()});
+    existentes.push({telefono:tel});
     ok++;
   }
   closeModal(); toast(`${ok} importados, ${dup} duplicados omitidos`,'success'); await renderClientes();
@@ -3266,7 +3282,7 @@ async function renderTurnos() {
 
   el.innerHTML=`
     <p class="view-title">📅 Turnos</p>
-    <p class="view-sub">Próximos 6 días — ${activos.length} turno${activos.length!==1?'s':''} pendiente${activos.length!==1?'s':''}</p>
+    <p class="view-sub">Turnos futuros — ${activos.length} turno${activos.length!==1?'s':''} pendiente${activos.length!==1?'s':''}</p>
     ${dias.map(iso=>{
       const del_dia=visibles.filter(t=>t.fecha===iso).sort((a,b)=>a.hora.localeCompare(b.hora));
       const label=fdateDay(iso)+(iso===hoy?' (Hoy)':'');
@@ -3429,6 +3445,11 @@ async function confirmarTurnoLlegada(id) {
     if (error?.code === 'TURN_ALREADY_INGRESADO') {
       toast('Este turno ya estaba ingresado en la cola.', 'info');
       navTo('dia');
+      return;
+    }
+    if (error?.code === 'TURN_CHANGED_RETRY') {
+      toast('El turno fue editado mientras se ingresaba. Revisá la agenda y volvé a intentarlo.', 'error');
+      await renderTurnos();
       return;
     }
     console.error('Error ingresando turno:', error);
