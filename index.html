@@ -305,6 +305,7 @@ const $ = (sel, ctx=document) => ctx.querySelector(sel);
 const $$ = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
 const uuid = () => crypto.randomUUID();
 const delay = ms => new Promise(r => setTimeout(r, ms));
+const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
 function fmoney(n) {
   n = Number(n)||0;
@@ -505,8 +506,8 @@ async function seeds() {
   if (svcs.length === 0) {
     const list = [
       {nombre:'Lavado Estándar',  precioAuto:30000, precioCamioneta:35000, precio4x4:40000,  precio:30000, variaSegunVehiculo:true,  descripcion:'Lavado exterior artesanal, aspirado profundo, acondicionado de plásticos interiores', comisionPct:15, activo:true},
-      {nombre:'Lavado Premium',   precioAuto:80000, precioCamioneta:95000, precio4x4:110000, precio:80000, variaSegunVehiculo:true,  descripcion:'Lavado exterior artesanal y de llantas, aspirado profundo y detallado, acondicionado de plásticos/burletes/gomas, incluye limpieza intensiva de marcos de puertas', comisionPct:15, activo:true},
-      {nombre:'Lavado de Motor',  precioAuto:50000, precioCamioneta:50000, precio4x4:50000,  precio:50000, variaSegunVehiculo:false, descripcion:'Limpieza técnica detallada del sector motor', comisionPct:10, activo:true},
+      {nombre:'Lavado Premium',   precioAuto:80000, precioCamioneta:95000, precio4x4:110000, precio:80000, variaSegunVehiculo:true,  descripcion:'Lavado exterior artesanal y de llantas, aspirado profundo y detallado, acondicionado de plásticos/burletes/gomas, incluye limpieza intensiva de marcos de puertas y limpieza y desinfección con máquina de vapor', comisionPct:15, activo:true},
+      {nombre:'Lavado de Motor',  precioAuto:50000, precioCamioneta:50000, precio4x4:50000,  precio:50000, variaSegunVehiculo:false, descripcion:'Limpieza técnica detallada del sector motor y limpieza y desinfección con máquina de vapor', comisionPct:10, activo:true},
       {nombre:'Tapizado Clásica', precioAuto:150000,precioCamioneta:150000,precio4x4:150000, precio:150000,variaSegunVehiculo:false, descripcion:'Limpieza profunda de tapizados in-situ (sin desarmar butacas), incluye Lavado Estándar', comisionPct:10, activo:true},
     ];
     for (const s of list) await dbPut('servicios', s);
@@ -519,11 +520,19 @@ async function seeds() {
       'Tapizado Clásica': { precioAuto:150000,precioCamioneta:150000, precio4x4:150000, variaSegunVehiculo:false },
     };
     for (const s of svcs) {
+      const dp = defaultPrices[s.nombre];
+      const patch = {};
       if (!s.precioAuto || s.variaSegunVehiculo === undefined) {
-        const dp = defaultPrices[s.nombre];
         const base = dp || { precioAuto: s.precio, precioCamioneta: s.precio, precio4x4: s.precio, variaSegunVehiculo: false };
-        await dbPut('servicios', { ...s, ...base, precio: s.precio || base.precioAuto });
+        Object.assign(patch, base, { precio: s.precio || base.precioAuto });
       }
+      if (s.nombre === 'Lavado Premium' && !/vapor/i.test(s.descripcion || '')) {
+        patch.descripcion = `${s.descripcion || ''} Incluye limpieza y desinfección con máquina de vapor`.trim();
+      }
+      if (s.nombre === 'Lavado de Motor' && !/vapor/i.test(s.descripcion || '')) {
+        patch.descripcion = `${s.descripcion || ''} Incluye limpieza y desinfección con máquina de vapor`.trim();
+      }
+      if (Object.keys(patch).length) await dbPut('servicios', { ...s, ...patch });
     }
   }
   // Seed new services (idempotent - only adds if name not present)
@@ -997,8 +1006,9 @@ function regSelVehiculo(idx) {
   const vehiculos = regGetVehiculos(regCliente);
   const v = vehiculos[idx];
   if (!v) return;
-  const marcaEl = $('#regMarca'); const patenteEl = $('#regPatenteVehiculo');
+  const marcaEl = $('#regMarca'); const modeloEl = $('#regModelo'); const patenteEl = $('#regPatenteVehiculo');
   if (marcaEl)   marcaEl.value   = v.marca   || '';
+  if (modeloEl)  modeloEl.value  = v.modelo  || '';
   if (patenteEl) patenteEl.value = v.patente || '';
   
   $$('#regVehiculosRapidos button').forEach(b => b.style.background = '');
@@ -1007,8 +1017,9 @@ function regSelVehiculo(idx) {
 }
 
 function regMostrarNuevoVehiculo() {
-  const marcaEl = $('#regMarca'); const patenteEl = $('#regPatenteVehiculo');
+  const marcaEl = $('#regMarca'); const modeloEl = $('#regModelo'); const patenteEl = $('#regPatenteVehiculo');
   if (marcaEl)   marcaEl.value   = '';
+  if (modeloEl)  modeloEl.value  = '';
   if (patenteEl) patenteEl.value = '';
   
   if (marcaEl)   marcaEl.focus();
@@ -1068,6 +1079,35 @@ function getPrecioSegunVehiculo(svc, tipo) {
   if (tipo === '4x4')       return svc.precio4x4       || svc.precio;
   if (tipo === 'moto')      return svc.precioMoto       || svc.precioAuto || svc.precio;
   return svc.precioAuto || svc.precio;
+}
+
+function fechaMesLocal(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 7);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+async function calcularMembresia({ clienteId, patente, servicioNombre, precioBase, fecha = new Date(), excludeId = null }) {
+  const month = fechaMesLocal(fecha);
+  const lavados = await dbGetAll('lavados');
+  const previousCount = bookingRules
+    ? bookingRules.monthlyVehicleWashCount(lavados, { clienteId, patente, month, excludeId })
+    : 0;
+  const benefit = bookingRules
+    ? bookingRules.membershipBenefitFor({ serviceName: servicioNombre, basePrice: precioBase, previousCount })
+    : { eligible: false, applies: false, previousCount, visitNumber: previousCount + 1, discount: 0, priceBase: precioBase, priceFinal: precioBase, message: '' };
+  return {
+    ...benefit,
+    month,
+    vehiclePlate: bookingRules?.normalizeVehiclePlate(patente) || String(patente || '').replace(/[^a-z0-9]/gi, '').toUpperCase()
+  };
+}
+
+function membershipNote(benefit) {
+  if (!benefit?.eligible) return '';
+  return benefit.applies
+    ? ` ⭐ ${benefit.message}`
+    : ` · Membresía ${Math.min(benefit.previousCount, benefit.threshold)}/${benefit.threshold}`;
 }
 
 function selVehiculo(tipo) {
@@ -1192,7 +1232,7 @@ async function regConfirmar() {
     }
 
     // ── Datos del vehículo (del formulario del paso 3) ───────────
-    const modeloVehiculo = '';
+    const modeloVehiculo = ($('#regModelo')?.value.trim() || '').toUpperCase();
     const patenteVehiculo = ($('#regPatenteVehiculo')?.value.trim() || '').toUpperCase();
     // Agregar patente/marca/vehiculo a la ficha del cliente si son nuevos
     let updateCliente = false;
@@ -1221,7 +1261,14 @@ async function regConfirmar() {
     const svcs = await dbGetAll('servicios');
     const svc  = svcs.find(s => s.id === regServicio);
     if (!svc) { toast('Servicio no encontrado', 'error'); return; }
-    const precioFinal = getPrecioSegunVehiculo(svc, regVehiculo);
+    const precioBase = getPrecioSegunVehiculo(svc, regVehiculo);
+    const membresia = await calcularMembresia({
+      clienteId: cliente.id,
+      patente: patenteVehiculo || (cliente.patentes || [])[0] || '',
+      servicioNombre: svc.nombre,
+      precioBase
+    });
+    const precioFinal = membresia.priceFinal;
 
     // ── Validar que el empleado asignado esté activo ────────────
     const todosEmpleados = await dbGetAll('empleados');
@@ -1267,6 +1314,11 @@ async function regConfirmar() {
       estado:           'en_espera',
       fechaInicio:      new Date().toISOString(),
       fechaFin:         null,
+      precioBase,
+      descuentoMembresia: membresia.discount,
+      membresiaMes: membresia.month,
+      membresiaVehiculo: membresia.vehiclePlate,
+      membresiaAplicada: membresia.applies,
       precio:           precioFinal,
       comisionesGrupal: comisionesGrupal,
       comisionMonto:    totalComisionMonto, // suma de todas las comisiones a pagar
@@ -1274,7 +1326,7 @@ async function regConfirmar() {
       origen:           'mostrador'
     });
 
-    toast(`✔ ${cliente.nombre} — ${svc.nombre} (${fmoney(precioFinal)}) agregado a la cola`, 'success');
+    toast(`✔ ${cliente.nombre} — ${svc.nombre} (${fmoney(precioFinal)}) agregado a la cola${membershipNote(membresia)}`, 'success');
     await navTo('dia');
   } catch (err) {
     console.error('Error al registrar lavado:', err);
@@ -1371,6 +1423,7 @@ async function renderDia() {
         <div class="flex-between mt-sm">
           <span class="timer" id="timer-${l.id}">${l.estado==='en_proceso'?elapsedStr(l.fechaInicio):''}</span>
           <div class="flex-gap">
+            ${user.rol==='dueno' ? `<button class="btn btn-secondary btn-sm" onclick="editarLavadoModal('${l.id}')">✏️ Editar</button>` : ''}
             ${(user.rol==='dueno' || l.estado==='en_espera') ? `<button class="btn btn-danger btn-sm" onclick="diaEliminar('${l.id}')">✕ Quitar</button>` : ''}
             ${accionBtn(l)}
           </div>
@@ -1434,11 +1487,102 @@ async function diaEliminar(id) {
 }
 function diaWhatsapp(id) { diaOpenWA(id); }
 
+async function editarLavadoModal(id) {
+  if (!auth.isDueno()) { toast('Solo el dueño puede editar la ficha del lavado.', 'error'); return; }
+  const [lavados, servicios] = await Promise.all([dbGetAll('lavados'), dbGetAll('servicios')]);
+  const lavado = lavados.find(x => x.id === id);
+  if (!lavado) return;
+  const activeServices = servicios.filter(s => s.activo !== false);
+  const typeOptions = [
+    ['auto', 'Auto'], ['camioneta', 'Camioneta / Familiar'], ['4x4', '4x4 / SUV'], ['moto', 'Moto']
+  ].map(([value, label]) => `<option value="${value}" ${lavado.tipoVehiculo === value ? 'selected' : ''}>${label}</option>`).join('');
+  const serviceOptions = activeServices.map(s => `<option value="${esc(s.id)}" ${s.id === lavado.servicioId ? 'selected' : ''}>${esc(s.nombre)}</option>`).join('');
+  const stateOptions = [
+    ['en_espera', 'En espera'], ['en_proceso', 'En proceso'], ['listo', 'Listo'], ['archivado', 'Archivado']
+  ].map(([value, label]) => `<option value="${value}" ${lavado.estado === value ? 'selected' : ''}>${label}</option>`).join('');
+  openModal(`
+    <div class="modal-title">✏️ Editar ficha del lavado</div>
+    <p class="text-muted" style="font-size:.78rem;margin-bottom:14px">Corregí los datos del cliente, vehículo, servicio, estado o importe. La membresía se recalcula sin cambiar los precios base.</p>
+    <div class="input-group"><label class="input-label">Cliente *</label><input class="input" id="elNombre" value="${esc(lavado.clienteNombre)}"/></div>
+    <div class="input-group"><label class="input-label">Teléfono</label><input class="input" id="elTel" type="tel" value="${esc(lavado.clienteTelefono)}"/></div>
+    <div class="input-group"><label class="input-label">Patente</label><input class="input" id="elPatente" value="${esc(lavado.patente)}" style="text-transform:uppercase"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="input-group"><label class="input-label">Marca</label><input class="input" id="elMarca" value="${esc(lavado.marcaVehiculo)}"/></div>
+      <div class="input-group"><label class="input-label">Modelo</label><input class="input" id="elModelo" value="${esc(lavado.modeloVehiculo)}"/></div>
+    </div>
+    <div class="input-group"><label class="input-label">Tipo de vehículo</label><select class="field" id="elTipo">${typeOptions}</select></div>
+    <div class="input-group"><label class="input-label">Servicio</label><select class="field" id="elServicio">${serviceOptions}</select></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="input-group"><label class="input-label">Estado</label><select class="field" id="elEstado">${stateOptions}</select></div>
+      <div class="input-group"><label class="input-label">Precio final</label><input class="input" id="elPrecio" type="number" min="0" step="100" value="${Number(lavado.precio) || 0}"/></div>
+    </div>
+    <div class="input-group"><label class="input-label">Notas</label><textarea class="input" id="elNotas" rows="3">${esc(lavado.notas)}</textarea></div>
+    <div class="form-actions mt-md"><button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button><button class="btn btn-primary btn-full" onclick="guardarEdicionLavado('${esc(id)}')">Guardar cambios</button></div>
+  `);
+}
+
+async function guardarEdicionLavado(id) {
+  if (!auth.isDueno()) { toast('Solo el dueño puede editar la ficha del lavado.', 'error'); return; }
+  const [lavados, servicios, empleados] = await Promise.all([dbGetAll('lavados'), dbGetAll('servicios'), dbGetAll('empleados')]);
+  const lavado = lavados.find(x => x.id === id);
+  const svc = servicios.find(x => x.id === $('#elServicio')?.value);
+  if (!lavado || !svc) { toast('No se encontró el lavado o el servicio.', 'error'); return; }
+  const nombre = $('#elNombre')?.value.trim();
+  if (!nombre) { toast('El nombre del cliente es obligatorio.', 'error'); return; }
+  const patente = ($('#elPatente')?.value.trim() || '').toUpperCase();
+  const tipoVehiculo = $('#elTipo')?.value || lavado.tipoVehiculo || 'auto';
+  const precioBase = getPrecioSegunVehiculo(svc, tipoVehiculo);
+  const membresia = await calcularMembresia({
+    clienteId: lavado.clienteId,
+    patente,
+    servicioNombre: svc.nombre,
+    precioBase,
+    fecha: lavado.fechaInicio || new Date(),
+    excludeId: lavado.id
+  });
+  const manualPrice = Number($('#elPrecio')?.value);
+  const precio = Number.isFinite(manualPrice) && manualPrice >= 0 ? manualPrice : membresia.priceFinal;
+  const empleadosActivos = empleados.filter(e => e.activo === true && e.rol !== 'dueno');
+  const comisionesGrupal = empleadosActivos.map(e => {
+    const pct = svc.comisionPct !== undefined ? svc.comisionPct : (e.comisionPct ?? 15);
+    return { empleadoId:e.id, nombre:e.nombre, pct, monto:Math.round((precio * pct) / 100) };
+  });
+  const estado = $('#elEstado')?.value || lavado.estado;
+  await dbPut('lavados', {
+    ...lavado,
+    clienteNombre: nombre,
+    clienteTelefono: $('#elTel')?.value.trim() || '',
+    patente,
+    marcaVehiculo: $('#elMarca')?.value.trim() || '',
+    modeloVehiculo: $('#elModelo')?.value.trim() || '',
+    tipoVehiculo,
+    servicioId: svc.id,
+    servicioNombre: svc.nombre,
+    precioBase,
+    descuentoMembresia: membresia.discount,
+    membresiaMes: membresia.month,
+    membresiaVehiculo: membresia.vehiclePlate,
+    membresiaAplicada: membresia.applies,
+    precio,
+    precioFinalManual: precio !== membresia.priceFinal,
+    estado,
+    fechaFin: estado === 'listo' && !lavado.fechaFin ? new Date().toISOString() : lavado.fechaFin,
+    comisionesGrupal,
+    comisionMonto: comisionesGrupal.reduce((sum, c) => sum + c.monto, 0),
+    notas: $('#elNotas')?.value || ''
+  });
+  closeModal();
+  toast(`Ficha actualizada ✔${membershipNote(membresia)}`, 'success');
+  await renderDia();
+}
+
 window.diaIniciar = diaIniciar;
 window.diaTerminar = diaTerminar;
 window.diaOpenWA = diaOpenWA;
 window.diaEliminar = diaEliminar;
 window.diaWhatsapp = diaWhatsapp;
+window.editarLavadoModal = editarLavadoModal;
+window.guardarEdicionLavado = guardarEdicionLavado;
 
 // ═══════════════════════════════════════════════════════════════
 //  VIEW: CLIENTES
@@ -1498,6 +1642,13 @@ async function verCliente(id) {
   const [todos, lavados, svcs, emps] = await Promise.all([dbGetAll('clientes'),dbGetAll('lavados'),dbGetAll('servicios'),dbGetAll('empleados')]);
   const c = todos.find(x=>x.id===id); if(!c) return;
   const lc = lavados.filter(l=>l.clienteId===id).sort((a,b)=>b.fechaInicio?.localeCompare(a.fechaInicio));
+  const mesActual=fechaMesLocal();
+  const patentesMembresia=[...(c.patentes||[]),...lc.map(l=>l.patente||'')].filter(Boolean).filter((p,i,a)=>a.findIndex(x=>String(x).replace(/[^a-z0-9]/gi,'').toUpperCase()===String(p).replace(/[^a-z0-9]/gi,'').toUpperCase())===i);
+  const membresiaRows=patentesMembresia.length ? patentesMembresia.map(p=>{
+    const count=bookingRules?.monthlyVehicleWashCount(lavados,{clienteId:id,patente:p,month:mesActual})||0;
+    const hasBenefit=lc.some(l=>l.membresiaAplicada&&l.membresiaMes===mesActual&&l.membresiaVehiculo===String(p).replace(/[^a-z0-9]/gi,'').toUpperCase());
+    return `<div class="list-row" style="margin-bottom:6px"><div class="list-row-left"><span class="row-title">🚗 ${p}</span><span class="row-sub">${Math.min(count,4)}/4 lavados completados este mes${hasBenefit?' · ⭐ beneficio aplicado':''}</span></div><span class="chip ${count>=4?'chip-done':'chip-wait'}">${count>=4?'4/4':' '+count+'/4'}</span></div>`;
+  }).join('') : '<p class="text-muted" style="font-size:.82rem">Registrá una patente para activar el seguimiento mensual.</p>';
   openModal(`
     <div class="modal-title">👤 ${c.nombre}</div>
     <div class="card" style="margin-bottom:12px">
@@ -1507,6 +1658,9 @@ async function verCliente(id) {
       <p><strong>Alta:</strong> ${fdateShort(c.creadoEn)||'—'}</p>
       <p><strong>Total lavados:</strong> ${lc.length}</p>
     </div>
+    <div class="section-head">Membresía del mes (${mesActual})</div>
+    <div class="card card-gold" style="margin-bottom:12px;font-size:.82rem">Al llegar al 4.º Lavado Estándar o Completo del mismo vehículo se descuentan <strong>$5.000</strong>.</div>
+    ${membresiaRows}
     <div class="section-head">Historial</div>
     ${lc.length===0?'<p class="text-muted" style="font-size:.85rem">Sin historial</p>':lc.map(l=>`
       <div class="list-row" style="margin-bottom:6px">
@@ -2628,7 +2782,7 @@ function cerrarSesion() {
 let resStep=1, resServicio=null, resVehiculo='auto', resFecha=null, resHora=null;
 let resVehiculoMarca='', resVehiculoModelo='', resVehiculoCategoria='auto';
 let _resSvcs=[], _resPrecio=0, _resPrecioMax=0, _resSvcNombre='';
-let vehicleCatalog=null;
+let vehicleCatalog=null, bookingRules=null;
 function resLegacyTypeForCategory(category) {
   return {auto:'auto',familiar:'camioneta',suv:'4x4',moto:'moto'}[category] || category || 'auto';
 }
@@ -2838,23 +2992,24 @@ async function resSelFecha(fecha){
   resFecha=fecha; resHora=null;
   document.querySelectorAll('.date-btn').forEach(b=>b.classList.toggle('selected',b.id===`rfd-${fecha}`));
   const turnos=await dbGetAll('turnos');
-  const dur={auto:60,familiar:90,suv:120,camioneta:90,'4x4':120,camioneta4x4:120,moto:30}[resVehiculo]||60;
+  const dur=bookingRules?.durationMinutesForVehicle(resVehiculoCategoria || resVehiculo) || 60;
   const d=new Date(fecha+'T12:00:00');
   const dom=d.getDay()===0;
   const startH=dom?9:8; const endH=dom?16:17;
   const slots=[];
-  for(let h=startH*60;h<endH*60;h+=dur){
+  for(let h=startH*60;h+dur<=endH*60;h+=dur){
     const hh=String(Math.floor(h/60)).padStart(2,'0');
     const mm=String(h%60).padStart(2,'0');
     slots.push(`${hh}:${mm}`);
   }
-  const ocupados=turnos.filter(t=>t.fecha===fecha&&['pendiente','confirmado'].includes(t.estado)).map(t=>t.hora);
   const sl=document.getElementById('resSlots');
   if(sl) sl.innerHTML=`
     <div class="section-head" style="margin-top:14px">Horario disponible</div>
     <div class="time-grid">
       ${slots.map(s=>{
-        const ocu=ocupados.includes(s);
+        const ocu=bookingRules
+          ? !bookingRules.isSlotAvailable(turnos, {fecha, hora:s, duracionMinutos:dur})
+          : turnos.some(t=>t.fecha===fecha&&['pendiente','confirmado'].includes(t.estado)&&t.hora===s);
         return `<button class="time-btn${ocu?' occupied':''}" id="rt-${s}" ${ocu?'disabled':''} onclick="${ocu?'':(`resSelHora('${s}')`)}">${ocu?s+' ✗':s}</button>`;
       }).join('')}
     </div>`;
@@ -2899,11 +3054,13 @@ async function resConfirmar(){
   const todos=await dbGetAll('clientes');
   let cli=todos.find(x=>x.telefono===tel);
   if(!cli) {
+    const marcaReserva=resVehiculoMarca||modelo;
+    const modeloReserva=resVehiculoModelo||modeloIngresado;
     cli=await dbPut('clientes',{
       nombre,telefono:tel,
       patentes:patente?[patente]:[],
-      marcas:modelo?[modelo]:[],
-      vehiculos:patente?[{patente,marca:modelo,modelo:''}]:[],
+      marcas:marcaReserva?[marcaReserva]:[],
+      vehiculos:patente?[{patente,marca:marcaReserva,modelo:modeloReserva}]:[],
       email:'',creadoEn:new Date().toISOString()
     });
   } else {
@@ -2912,20 +3069,37 @@ async function resConfirmar(){
     const vehs = cli.vehiculos||[];
     if(patente && !pats.includes(patente)) {
       pats.push(patente);
-      vehs.push({patente,marca:modelo,modelo:''});
-      await dbPut('clientes',{...cli, patentes:pats, vehiculos:vehs, marcas:[...(cli.marcas||[]), modelo].filter(Boolean)});
+      vehs.push({patente,marca:resVehiculoMarca||modelo,modelo:resVehiculoModelo||modeloIngresado});
+      await dbPut('clientes',{...cli, patentes:pats, vehiculos:vehs, marcas:[...(cli.marcas||[]), resVehiculoMarca||modelo].filter(Boolean)});
     }
   }
   const svcs=await dbGetAll('servicios');
   const svc=svcs.find(s=>s.id===resServicio);
-  const precio=_resPrecio||svc?.precio||0;
-  const tipoLabel={auto:'Auto / Sedán / Hatchback',familiar:'Familiar chico / Rural',suv:'SUV / Crossover / Pick-up / 4x4',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',moto:'Moto'}[resVehiculo]||resVehiculo;
+  const duracionMinutos=bookingRules?.durationMinutesForVehicle(resVehiculoCategoria || resVehiculo) || 60;
+  const turnosActuales=await dbGetAll('turnos');
+  if (bookingRules && !bookingRules.isSlotAvailable(turnosActuales, { fecha:resFecha, hora:resHora, duracionMinutos })) {
+    toast('Ese horario acaba de ocuparse o se superpone con otro turno. Elegí otro.', 'error');
+    await resSelFecha(resFecha);
+    return;
+  }
+  const precioBase=_resPrecio||svc?.precio||0;
+  const membresia=await calcularMembresia({
+    clienteId:cli.id,
+    patente,
+    servicioNombre:svc?.nombre||_resSvcNombre,
+    precioBase,
+    fecha:`${resFecha}T${resHora}:00`
+  });
+  const precio=membresia.priceFinal;
+  const tipoLabel={auto:'Auto / Sedán / Hatchback',familiar:'Familiar chico / Rural',suv:'SUV / Crossover / Pick-up / 4x4',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',camioneta4x4:'SUV / Pick-up / 4x4',moto:'Moto'}[resVehiculo]||resVehiculo;
   await dbPut('turnos',{
     clienteId:cli.id,clienteNombre:nombre,clienteTelefono:tel,
     servicioId:resServicio,servicioNombre:svc?.nombre||_resSvcNombre,
     tipoVehiculo:resLegacyTypeForCategory(resVehiculoCategoria),tipoLabel,vehiculoCategoria:resVehiculoCategoria,
-    vehiculoMarca:resVehiculoMarca||'',vehiculoModelo:resVehiculoModelo||'',precio,
-    patente:patente||'',marcaVehiculo:modelo||'',
+    vehiculoMarca:resVehiculoMarca||'',vehiculoModelo:resVehiculoModelo||'',precioBase,
+    descuentoMembresia:membresia.discount,membresiaMes:membresia.month,membresiaVehiculo:membresia.vehiclePlate,
+    membresiaAplicada:membresia.applies,precio,duracionMinutos,
+    patente:patente||'',marcaVehiculo:resVehiculoMarca||modelo||'',modeloVehiculo:modelo,
     fecha:resFecha,hora:resHora,estado:'pendiente',
     creadoEn:new Date().toISOString()
   });
@@ -2950,6 +3124,7 @@ async function resConfirmar(){
         <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--gold-dim)"><span style="color:var(--muted);font-size:.85rem">💰 Precio</span><strong class="text-gold" style="font-size:1.1rem">${_resPrecioMax>0?fmoney(precio)+' / '+fmoney(_resPrecioMax):fmoney(precio)}</strong></div>
       </div>
     </div>
+    ${membresia.applies?`<p class="card card-gold" style="font-size:.78rem;margin-bottom:10px;text-align:center">⭐ ${membresia.message}</p>`:''}
     ${_resPrecioMax>0?`<p style="color:var(--muted);font-size:.75rem;text-align:center;margin-bottom:8px">* El precio exacto se confirma en el local según el modelo del vehículo.</p>`:''}
     <a href="${waUrl}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;background:#25D366;color:#fff;border:none;padding:14px;border-radius:var(--r-md);font-size:.95rem;font-weight:600;text-decoration:none;margin-bottom:10px">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.117.549 4.116 1.508 5.855L0 24l6.335-1.482A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.89 0-3.663-.523-5.179-1.435l-.371-.221-3.762.88.928-3.656-.242-.377A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
@@ -2972,7 +3147,8 @@ async function renderTurnos() {
     d.setDate(d.getDate()+1);
   }
   const todosTurnos=await dbGetAll('turnos');
-  const activos=todosTurnos.filter(t=>['pendiente','confirmado'].includes(t.estado));
+  const activeStates=bookingRules?.ACTIVE_TURNO_STATES||['pendiente','confirmado'];
+  const activos=todosTurnos.filter(t=>activeStates.includes(t.estado));
 
   el.innerHTML=`
     <p class="view-title">📅 Turnos</p>
@@ -2988,64 +3164,146 @@ async function renderTurnos() {
           <div class="card" style="border-left:3px solid var(--gold);margin-bottom:10px">
             <div style="display:flex;justify-content:space-between;align-items:flex-start">
               <div>
-                <div style="font-weight:600;font-size:.95rem">${t.clienteNombre}</div>
+                <div style="font-weight:600;font-size:.95rem">${esc(t.clienteNombre)}</div>
                 <div style="color:var(--muted);font-size:.78rem;margin-top:3px">
-                  🕐 ${t.hora} hs · ${t.tipoLabel||t.tipoVehiculo} · ${t.servicioNombre}
+                  🕐 ${esc(t.hora)} hs · ${esc(t.tipoLabel||t.tipoVehiculo)} · ${esc(t.servicioNombre)}
                 </div>
+                <div style="color:var(--muted);font-size:.72rem;margin-top:3px">📞 ${esc(t.clienteTelefono||'—')} · 🚗 ${esc(t.patente||'Sin patente')}</div>
               </div>
               <div style="text-align:right">
-                <div class="text-gold" style="font-weight:700">${fmoney(t.precio||0)}</div>
+                <div class="text-gold" style="font-weight:700">${fmoney(t.precio||t.precioBase||0)}</div>
+                ${t.membresiaAplicada?'<div style="font-size:.68rem;color:var(--gold)">⭐ Membresía</div>':''}
                 <span class="chip chip-wait" style="font-size:.65rem;margin-top:4px;display:inline-block">${t.estado}</span>
               </div>
             </div>
             <div style="display:flex;gap:8px;margin-top:10px">
-              <button class="btn btn-secondary btn-sm" onclick="cancelarTurno('${t.id}')">🚫 Cancelar</button>
-              <button class="btn btn-primary btn-sm" onclick="confirmarTurnoLlegada('${t.id}')">✅ Llegó</button>
+              <button class="btn btn-secondary btn-sm" onclick="editarTurnoModal('${esc(t.id)}')">✏️ Editar</button>
+              <button class="btn btn-secondary btn-sm" onclick="cancelarTurno('${esc(t.id)}')">🚫 Cancelar</button>
+              ${activeStates.includes(t.estado)?`<button class="btn btn-primary btn-sm" onclick="confirmarTurnoLlegada('${esc(t.id)}')">✅ Llegó</button>`:'<span class="chip chip-done" style="font-size:.7rem">Ya ingresó</span>'}
             </div>
           </div>`).join('')}`;
     }).join('')}
   `;
 }
 
+async function editarTurnoModal(id) {
+  if (!auth.isDueno()) { toast('Solo el dueño puede editar turnos.', 'error'); return; }
+  const [turnos, servicios] = await Promise.all([dbGetAll('turnos'), dbGetAll('servicios')]);
+  const turno=turnos.find(x=>x.id===id); if(!turno) return;
+  const activeServices=servicios.filter(s=>s.activo!==false);
+  const typeOptions=[['auto','Auto'],['camioneta','Camioneta / Familiar'],['4x4','4x4 / SUV'],['moto','Moto']]
+    .map(([value,label])=>`<option value="${value}" ${turno.tipoVehiculo===value?'selected':''}>${label}</option>`).join('');
+  const serviceOptions=activeServices.map(s=>`<option value="${esc(s.id)}" ${s.id===turno.servicioId?'selected':''}>${esc(s.nombre)}</option>`).join('');
+  openModal(`
+    <div class="modal-title">✏️ Editar turno</div>
+    <p class="text-muted" style="font-size:.78rem;margin-bottom:14px">La hora se valida contra la duración real del vehículo para evitar superposiciones.</p>
+    <div class="input-group"><label class="input-label">Cliente *</label><input class="input" id="etNombre" value="${esc(turno.clienteNombre)}"/></div>
+    <div class="input-group"><label class="input-label">Teléfono</label><input class="input" id="etTel" type="tel" value="${esc(turno.clienteTelefono)}"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="input-group"><label class="input-label">Fecha *</label><input class="input" id="etFecha" type="date" value="${esc(turno.fecha)}"/></div>
+      <div class="input-group"><label class="input-label">Hora *</label><input class="input" id="etHora" type="time" value="${esc(turno.hora)}"/></div>
+    </div>
+    <div class="input-group"><label class="input-label">Patente</label><input class="input" id="etPatente" value="${esc(turno.patente)}" style="text-transform:uppercase"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="input-group"><label class="input-label">Marca</label><input class="input" id="etMarca" value="${esc(turno.vehiculoMarca||turno.marcaVehiculo)}"/></div>
+      <div class="input-group"><label class="input-label">Modelo</label><input class="input" id="etModelo" value="${esc(turno.vehiculoModelo||turno.modeloVehiculo)}"/></div>
+    </div>
+    <div class="input-group"><label class="input-label">Tipo de vehículo</label><select class="field" id="etTipo">${typeOptions}</select></div>
+    <div class="input-group"><label class="input-label">Servicio</label><select class="field" id="etServicio">${serviceOptions}</select></div>
+    <div class="form-actions mt-md"><button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button><button class="btn btn-primary btn-full" onclick="guardarEdicionTurno('${esc(id)}')">Guardar cambios</button></div>
+  `);
+}
+
+async function guardarEdicionTurno(id) {
+  if (!auth.isDueno()) { toast('Solo el dueño puede editar turnos.', 'error'); return; }
+  const [turnos, servicios]=await Promise.all([dbGetAll('turnos'),dbGetAll('servicios')]);
+  const turno=turnos.find(x=>x.id===id);
+  const svc=servicios.find(x=>x.id===$('#etServicio')?.value);
+  if(!turno||!svc){toast('No se encontró el turno o el servicio.','error');return;}
+  const fecha=$('#etFecha')?.value;
+  const hora=$('#etHora')?.value;
+  const tipoVehiculo=$('#etTipo')?.value||turno.tipoVehiculo||'auto';
+  const duracionMinutos=bookingRules?.durationMinutesForVehicle(tipoVehiculo)||60;
+  if(!fecha||!hora){toast('Completá fecha y hora.','error');return;}
+  if(bookingRules&&!bookingRules.isSlotAvailable(turnos,{fecha,hora,duracionMinutos,excludeId:id})){
+    toast('Ese horario se superpone con otro turno. Elegí otro.','error');return;
+  }
+  const patente=($('#etPatente')?.value.trim()||'').toUpperCase();
+  const precioBase=getPrecioSegunVehiculo(svc,tipoVehiculo);
+  const membresia=await calcularMembresia({clienteId:turno.clienteId,patente,servicioNombre:svc.nombre,precioBase,fecha:`${fecha}T${hora}:00`});
+  const tipoLabel={auto:'Auto / Sedán / Hatchback',camioneta:'Camioneta / Familiar','4x4':'4x4 / SUV',moto:'Moto'}[tipoVehiculo]||tipoVehiculo;
+  await dbPut('turnos',{
+    ...turno,
+    clienteNombre:$('#etNombre')?.value.trim()||turno.clienteNombre,
+    clienteTelefono:$('#etTel')?.value.trim()||'',
+    fecha,hora,patente,
+    vehiculoMarca:$('#etMarca')?.value.trim()||'',
+    vehiculoModelo:$('#etModelo')?.value.trim()||'',
+    marcaVehiculo:$('#etMarca')?.value.trim()||'',
+    modeloVehiculo:$('#etModelo')?.value.trim()||'',
+    tipoVehiculo,tipoLabel,vehiculoCategoria:tipoVehiculo,duracionMinutos,
+    servicioId:svc.id,servicioNombre:svc.nombre,precioBase,descuentoMembresia:membresia.discount,
+    membresiaMes:membresia.month,membresiaVehiculo:membresia.vehiclePlate,membresiaAplicada:membresia.applies,precio:membresia.priceFinal
+  });
+  closeModal();
+  toast(`Turno actualizado ✔${membershipNote(membresia)}`,'success');
+  await renderTurnos();
+}
+
 async function cancelarTurno(id) {
   confirmModal('¿Cancelar este turno? Se notificará en el historial.', async () => {
     const turnos=await dbGetAll('turnos');
     const t=turnos.find(x=>x.id===id); if(!t) return;
+    if(!['pendiente','confirmado'].includes(t.estado)){toast('Este turno ya no está activo.','info');return;}
     await dbPut('turnos',{...t,estado:'cancelado'});
     toast('Turno cancelado','info');
-    renderTurnos();
+    await renderTurnos();
   },'Cancelar turno','btn-danger');
 }
 
 async function confirmarTurnoLlegada(id) {
   const turnos=await dbGetAll('turnos');
   const t=turnos.find(x=>x.id===id); if(!t) return;
-  // Crear un lavado en cola a partir del turno
+  const lavadosExistentes=await dbGetAll('lavados');
+  const lavadoExistente=lavadosExistentes.find(l=>l.turnoId===id);
+  if(lavadoExistente){
+    toast('Este turno ya estaba ingresado en la cola.','info');
+    navTo('dia');
+    return;
+  }
+  if(!['pendiente','confirmado'].includes(t.estado)){toast('El turno ya no está pendiente.','info');return;}
+  // Crear un lavado idempotente a partir del turno
   const svcs=await dbGetAll('servicios');
   const svc=svcs.find(s=>s.id===t.servicioId);
   const user=auth.get();
   const emps=(await dbGetAll('empleados')).filter(e=>e.activo===true&&e.rol!=='dueno');
+  const precioBase=t.precioBase||(svc?getPrecioSegunVehiculo(svc,t.tipoVehiculo||'auto'):Number(t.precio)||0);
+  const membresia=await calcularMembresia({clienteId:t.clienteId,patente:t.patente||'',servicioNombre:svc?.nombre||t.servicioNombre,precioBase});
+  const precio=membresia.priceFinal;
   const comisionesGrupal=emps.map(e=>({
     empleadoId:e.id, nombre:e.nombre,
     pct:svc?.comisionPct??e.comisionPct??15,
-    monto:Math.round(((t.precio||svc?.precio||0)*(svc?.comisionPct??e.comisionPct??15))/100)
+    monto:Math.round((precio*(svc?.comisionPct??e.comisionPct??15))/100)
   }));
   await dbPut('lavados',{
-    clienteId:t.clienteId, clienteNombre:t.clienteNombre, clienteTelefono:t.clienteTelefono,
+    id:`turno-${t.id}`,clienteId:t.clienteId, clienteNombre:t.clienteNombre, clienteTelefono:t.clienteTelefono,
     patente:t.patente||'', marcaVehiculo:t.vehiculoMarca||t.marcaVehiculo||'', modeloVehiculo:t.vehiculoModelo||t.modeloVehiculo||'', tipoVehiculo:t.tipoVehiculo, vehiculoCategoria:t.vehiculoCategoria||'',
     servicioId:t.servicioId, servicioNombre:t.servicioNombre,
     empleadoId:user?.id||'', estado:'en_espera',
     fechaInicio:new Date().toISOString(), fechaFin:null,
-    precio:t.precio||svc?.precio||0, comisionesGrupal,
+    precioBase,descuentoMembresia:membresia.discount,membresiaMes:membresia.month,membresiaVehiculo:membresia.vehiclePlate,membresiaAplicada:membresia.applies,
+    precio, duracionMinutos:t.duracionMinutos||bookingRules?.durationMinutesForVehicle(t.vehiculoCategoria||t.tipoVehiculo)||60, comisionesGrupal,
     comisionMonto:comisionesGrupal.reduce((a,c)=>a+c.monto,0),
     notas:'Turno reservado online', origen:'reserva', turnoId:t.id
   });
-  await dbPut('turnos',{...t,estado:'confirmado'});
-  toast('Vehículo agregado a la cola del día ✔','success');
+  await dbPut('turnos',{...t,estado:'ingresado',ingresadoEn:new Date().toISOString()});
+  toast(`Vehículo agregado a la cola del día ✔${membershipNote(membresia)}`,'success');
   navTo('dia');
 }
 window.cancelarTurno=cancelarTurno;
 window.confirmarTurnoLlegada=confirmarTurnoLlegada;
+window.editarTurnoModal=editarTurnoModal;
+window.guardarEdicionTurno=guardarEdicionTurno;
 
 // ═══════════════════════════════════════════════════════════════
 //  HASH ROUTER
@@ -3066,8 +3324,9 @@ window.addEventListener('hashchange', handleHash);
 // ═══════════════════════════════════════════════════════════════
 async function appInit() {
   try {
-    [vehicleCatalog] = await Promise.all([
+    [vehicleCatalog, bookingRules] = await Promise.all([
       import('./js/data/vehiculos.js'),
+      import('./js/domain/booking-rules.mjs'),
       dbOpen()
     ]);
   } catch(e) {

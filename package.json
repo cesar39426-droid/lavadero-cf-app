@@ -1,0 +1,8 @@
+{
+  "name": "lavaderocf-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/booking-rules.test.mjs"
+  }
+}
