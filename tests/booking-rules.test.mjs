@@ -3,8 +3,15 @@ import assert from 'node:assert/strict';
 import {
   isSlotAvailable,
   membershipBenefitFor,
-  monthlyVehicleWashCount
+  monthlyVehicleWashCount,
+  slotLockKeys
 } from '../js/domain/booking-rules.mjs';
+
+test('genera claves de bloqueo alineadas para intervalos de distinta duración', () => {
+  assert.deepEqual(slotLockKeys({ fecha: '2026-10-05', hora: '08:15', duracionMinutos: 60 }), [
+    '2026-10-05_0800', '2026-10-05_0830', '2026-10-05_0900'
+  ]);
+});
 
 test('bloquea solapamiento parcial usando la duración existente', () => {
   const turnos = [{

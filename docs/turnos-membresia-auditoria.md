@@ -1,30 +1,34 @@
-# Auditoría de la aplicación LavaderoCF
+# Auditoría y correcciones de la aplicación LavaderoCF
 
 ## Base revisada
 
 - Repositorio: `cesar39426-droid/lavadero-cf-app`
-- Último estado de `master`: `1423368` (`feat(reserva): agregar selector inteligente y tarifas por vehiculo`)
-- La rama remota `lavaderocfapp` **no existe**; se creó una rama local con ese nombre desde `master` para trabajar sin modificar `master`.
-- La aplicación real se ejecuta principalmente desde `index.html` con módulos auxiliares y Firestore.
+- Branch de trabajo: `lavaderocfapp`
+- Runtime canónico servido por Vercel: `index.html` con Firestore 10.12.2 vía CDN.
+- El árbol `js/app.js` + `js/modules/` es legado y no se carga desde `index.html`; tampoco se precachea en el service worker.
 
-## Hallazgos funcionales
+## Correcciones implementadas
 
-1. **No había membresía implementada.** La ficha de cliente no guardaba conteo mensual por vehículo, beneficio aplicado ni descuento.
-2. **La reserva pública no guardaba una duración explícita.** La disponibilidad comparaba únicamente la misma hora, por lo que una reserva larga podía solaparse con otra de menor duración.
-3. **La conversión de turno a lavado no era idempotente.** El botón `Llegó` podía crear más de un lavado para el mismo turno y dejar el turno en `confirmado`.
-4. **El dueño no podía editar un turno futuro.** Solo existían cancelar y convertir a lavado.
-5. **El dueño no podía editar la ficha del lavado del día.** La pantalla Hoy solo permitía iniciar, terminar, avisar o eliminar.
-6. **La reserva pública no tenía una segunda validación robusta contra solapamientos justo antes de guardar.** Dos clientes podían intentar confirmar el mismo intervalo casi al mismo tiempo.
-7. **Premium y Lavado de Motor tenían descripciones que no mencionaban la limpieza y desinfección con máquina de vapor**, aunque el requerimiento comercial ya lo definía.
-8. **El service worker cachea la app**, por lo que cada cambio de funcionalidad necesita incrementar `CACHE_VERSION`.
+1. **Disponibilidad por intervalos:** los turnos guardan `duracionMinutos`, los horarios respetan el cierre y la disponibilidad bloquea solapamientos parciales.
+2. **Reserva concurrente:** cada turno nuevo crea, dentro de una transacción Firestore, documentos únicos en `turnoBloqueos` para cada intervalo de 30 minutos. Dos clientes no pueden confirmar la misma franja; al editar, cancelar o ingresar se actualizan/liberan esos bloqueos.
+3. **Migración de datos existentes:** al iniciar, los turnos activos heredados reciben duración y bloqueos; si ya existe un conflicto se conserva el turno y se evita bloquear una franja adicional.
+4. **Edición de turnos:** el dueño puede corregir cliente, teléfono, fecha, hora, patente, marca, modelo, categoría y servicio, con revalidación transaccional.
+5. **Llegada idempotente:** la conversión usa `turnoId`, un id determinista (`turno-<id>`) y una transacción conjunta para no crear dos lavados aunque se pulse dos veces.
+6. **Agenda visible:** se muestran todos los turnos futuros existentes, no solo seis días; los ya ingresados quedan visibles sin botón de nueva conversión.
+7. **Edición de fichas del día:** el dueño puede editar también lavados `listo`/`archivado`, además de los que están en espera o proceso.
+8. **Membresía mensual:** el cuarto lavado completado del mismo `clienteId` + patente normalizada aplica exactamente `$5.000` en `Lavado Estándar` o `Lavado Completo`. Premium, Motor, Tapizado y motos no reciben el beneficio. Se guardan precio base, descuento, mes, vehículo y precio final.
+9. **Reserva pública:** permite `Lavado Completo`, muestra el beneficio si corresponde, revalida disponibilidad antes de guardar y comunica un conflicto concurrente sin duplicar la reserva.
+10. **Datos comerciales:** Premium y Lavado de Motor incluyen limpieza y desinfección con máquina de vapor sin alterar precios.
+11. **Caché:** `CACHE_VERSION` pasa a `lavaderocf-v1.5.0`, con comentario consistente y solo los módulos del runtime canónico.
 
-## Correcciones previstas
+## Evidencia de validación
 
-- Añadir reglas puras y testeables de duración, solapamiento y membresía.
-- Validar intervalos de turnos y repetir la validación antes de confirmar.
-- Agregar edición de turnos futuros y de lavados desde el panel del dueño.
-- Hacer idempotente la acción de llegada usando `turnoId`.
-- Aplicar el beneficio de membresía en el cuarto lavado completado del mismo vehículo dentro del mes: descuento fijo de `$5.000`, conservando el precio base y dejando trazabilidad en el lavado.
-- Aplicar la membresía al `Lavado Estándar`/`Lavado Completo` y no a Premium, Motor, Tapizado ni motos.
-- Actualizar las descripciones comerciales de Premium y Motor con vapor.
-- Versionar el service worker.
+- `npm test`: **6/6 pruebas exitosas**.
+- `node --check`: módulo de reglas, pruebas y JavaScript inline del HTML sin errores.
+- `git diff --check`: limpio.
+- Servidor estático local: `/`, `js/domain/booking-rules.mjs` y `sw.js` responden HTTP 200.
+
+## Límites y operación
+
+- Firestore debe permitir escritura en `turnos` y `turnoBloqueos` para el usuario que reserva; las reglas de seguridad deben validarse en el proyecto Firebase antes de producción.
+- Los turnos antiguos que ya se solapaban no se borran automáticamente: la migración evita crear nuevos bloqueos ambiguos y deja el conflicto visible para que el dueño lo corrija desde el panel.

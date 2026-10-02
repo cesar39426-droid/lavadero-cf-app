@@ -1,7 +1,7 @@
 /**
  * sw.js — Service Worker de LavaderoCF
  * Estrategia: Cache-First para assets estáticos, Network-First para rutas de datos.
- * Versión: 1.0.0
+ * Versión: 1.5.0
  */
 
 const CACHE_VERSION = 'lavaderocf-v1.5.0';
@@ -18,32 +18,9 @@ const STATIC_ASSETS = [
   '/css/components.css',
   '/css/layout.css',
   '/css/animations.css',
-  '/js/app.js',
-  '/js/router.js',
-  '/js/auth.js',
-  '/js/db/db.js',
-  '/js/db/schema.js',
-  '/js/db/seeds.js',
-  '/js/modules/login.js',
-  '/js/modules/clientes.js',
-  '/js/modules/registro.js',
-  '/js/modules/vehiculos-dia.js',
-  '/js/modules/turnos.js',
-  '/js/modules/dashboard.js',
-  '/js/modules/cierre-caja.js',
-  '/js/modules/costos.js',
-  '/js/modules/empleados.js',
-  '/js/modules/servicios.js',
-  '/js/modules/recordatorios.js',
-  '/js/modules/configuracion.js',
-  '/js/modules/ia.js',
+  // Runtime canónico: index.html + estos dos módulos ES.
   '/js/data/vehiculos.js',
   '/js/domain/booking-rules.mjs',
-  '/js/utils/format.js',
-  '/js/utils/csv.js',
-  '/js/utils/whatsapp.js',
-  '/js/utils/calendar.js',
-  '/js/utils/charts.js',
   '/assets/logo.jpg',
   '/assets/icons/icon-192.png',
   '/assets/icons/icon-512.png',

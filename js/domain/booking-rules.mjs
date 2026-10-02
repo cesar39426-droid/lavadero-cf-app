@@ -36,6 +36,19 @@ export function intervalsOverlap(startA, endA, startB, endB) {
   return startA < endB && startB < endA;
 }
 
+export function slotLockKeys({ fecha, hora, duracionMinutos, quantum = 30 }) {
+  const start = toMinutes(hora);
+  const duration = Number(duracionMinutos) || durationMinutesForVehicle('auto');
+  if (!fecha || !Number.isFinite(start) || duration <= 0) return [];
+  const keys = [];
+  const alignedStart = Math.floor(start / quantum) * quantum;
+  const alignedEnd = Math.ceil((start + duration) / quantum) * quantum;
+  for (let minute = alignedStart; minute < alignedEnd; minute += quantum) {
+    keys.push(`${fecha}_${String(Math.floor(minute / 60)).padStart(2, '0')}${String(minute % 60).padStart(2, '0')}`);
+  }
+  return keys;
+}
+
 function turnoDuration(turno) {
   const stored = Number(turno?.duracionMinutos);
   return Number.isFinite(stored) && stored > 0
