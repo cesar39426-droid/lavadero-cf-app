@@ -34,3 +34,12 @@
 
 - Firestore debe permitir escritura en `turnos` y `turnoBloqueos` para el usuario que reserva; las reglas de seguridad deben validarse en el proyecto Firebase antes de producción.
 - Los turnos antiguos que ya se solapaban no se borran automáticamente: la migración evita crear nuevos bloqueos ambiguos y deja el conflicto visible para que el dueño lo corrija desde el panel.
+
+## Reglas comerciales confirmadas — revisión 2026-10-08
+
+- La membresía vive únicamente en la aplicación, no se comunica como promoción automática en la web.
+- El conteo es por combinación cliente + patente y se reinicia cada mes calendario.
+- El beneficio se aplica en el cuarto Lavado Estándar del mes y descuenta $5.000 del precio vigente; no aplica a Premium, Motor, Tapizados ni motos.
+- El dueño puede corregir manualmente el precio y la ficha antes de guardar.
+- Catálogo actualizado: Moto 250 $20.000 y Tapizado Full $150.000, con retiro de asientos y limpieza del piso.
+- Cuando una reserva usa un teléfono existente, se reutiliza la ficha del cliente y solo se agrega una nueva patente/vehículo si corresponde. El turno queda visible en la agenda semanal y, al llegar su fecha, en el panel del día para ingresar el lavado.

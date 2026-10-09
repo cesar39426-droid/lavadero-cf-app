@@ -74,3 +74,11 @@ test('no aplica antes de cuatro lavados ni a servicios no elegibles', () => {
     serviceName: 'Lavado de Motor', basePrice: 50000, previousCount: 3
   }).discount, 0);
 });
+test('no activa la membresía para Tapizado Full', () => {
+  const benefit = membershipBenefitFor({
+    serviceName: 'Tapizado Full', basePrice: 150000, previousCount: 3
+  });
+  assert.equal(benefit.eligible, false);
+  assert.equal(benefit.discount, 0);
+  assert.equal(benefit.priceFinal, 150000);
+});

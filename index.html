@@ -622,6 +622,7 @@ async function seeds() {
       {nombre:'Lavado Premium',   precioAuto:80000, precioCamioneta:95000, precio4x4:110000, precio:80000, variaSegunVehiculo:true,  descripcion:'Lavado exterior artesanal y de llantas, aspirado profundo y detallado, acondicionado de plásticos/burletes/gomas, incluye limpieza intensiva de marcos de puertas y limpieza y desinfección con máquina de vapor', comisionPct:15, activo:true},
       {nombre:'Lavado de Motor',  precioAuto:50000, precioCamioneta:50000, precio4x4:50000,  precio:50000, variaSegunVehiculo:false, descripcion:'Limpieza técnica detallada del sector motor y limpieza y desinfección con máquina de vapor', comisionPct:10, activo:true},
       {nombre:'Tapizado Clásica', precioAuto:150000,precioCamioneta:150000,precio4x4:150000, precio:150000,variaSegunVehiculo:false, descripcion:'Limpieza profunda de tapizados in-situ (sin desarmar butacas), incluye Lavado Estándar', comisionPct:10, activo:true},
+      {nombre:'Tapizado Full',    precioAuto:150000,precioCamioneta:150000,precio4x4:150000, precio:150000,variaSegunVehiculo:false, descripcion:'Limpieza profunda con retiro de asientos para limpiar también el piso completo del vehículo', comisionPct:10, activo:true},
     ];
     for (const s of list) await dbPut('servicios', s);
   } else {
@@ -645,6 +646,14 @@ async function seeds() {
       if (s.nombre === 'Lavado de Motor' && !/vapor/i.test(s.descripcion || '')) {
         patch.descripcion = `${s.descripcion || ''} Incluye limpieza y desinfección con máquina de vapor`.trim();
       }
+      const approved = defaultPrices[s.nombre];
+      if (approved) {
+        Object.assign(patch, approved, { precio: approved.precioAuto });
+        if (s.nombre === 'Lavado Estándar') patch.descripcion = 'Lavado exterior artesanal, aspirado profundo y acondicionado de plásticos interiores';
+        if (s.nombre === 'Lavado Premium') patch.descripcion = 'Lavado exterior artesanal y de llantas, aspirado profundo y detallado, acondicionado de plásticos, burletes y gomas, limpieza intensiva de marcos de puertas y limpieza y desinfección con máquina de vapor';
+        if (s.nombre === 'Lavado de Motor') patch.descripcion = 'Limpieza técnica detallada del sector motor y limpieza y desinfección con máquina de vapor';
+        if (s.nombre === 'Tapizado Clásica') patch.descripcion = 'Limpieza profunda de tapizados in-situ (sin desarmar butacas), incluye Lavado Estándar';
+      }
       if (Object.keys(patch).length) await dbPut('servicios', { ...s, ...patch });
     }
   }
@@ -655,6 +664,8 @@ async function seeds() {
     {nombre:'Solo Interior',    precioAuto:20000, precioCamioneta:20000, precio4x4:30000,  precioMoto:0,     precio:20000, variaSegunVehiculo:true,  descripcion:'Aspirado profundo y acondicionado de plasticos interiores, sin exterior', comisionPct:15, activo:true},
     {nombre:'Moto 110cc',       precioAuto:16000, precioCamioneta:16000, precio4x4:16000,  precioMoto:16000, precio:16000, variaSegunVehiculo:false, descripcion:'Lavado artesanal de moto 110cc', comisionPct:15, activo:true},
     {nombre:'Moto 150cc',       precioAuto:18000, precioCamioneta:18000, precio4x4:18000,  precioMoto:18000, precio:18000, variaSegunVehiculo:false, descripcion:'Lavado artesanal de moto 150cc', comisionPct:15, activo:true},
+    {nombre:'Moto 250cc',       precioAuto:20000, precioCamioneta:20000, precio4x4:20000,  precioMoto:20000, precio:20000, variaSegunVehiculo:false, descripcion:'Lavado artesanal de moto 250cc', comisionPct:15, activo:true},
+    {nombre:'Tapizado Full',    precioAuto:150000,precioCamioneta:150000,precio4x4:150000, precioMoto:150000,precio:150000,variaSegunVehiculo:false, descripcion:'Limpieza profunda con retiro de asientos para limpiar también el piso completo del vehículo', comisionPct:10, activo:true},
   ];
   const allSvcs2 = await dbGetAll('servicios');
   for (const ns of seedNewSvcs) {
@@ -1507,7 +1518,7 @@ async function renderDia() {
   try {
     const allTurnos = await dbGetAll('turnos');
     const todayStr = todayISO();
-    turnosHoy = allTurnos.filter(t=>t.fecha===todayStr && t.estado==='pendiente')
+    turnosHoy = allTurnos.filter(t=>t.fecha===todayStr && ['pendiente','confirmado'].includes(t.estado))
                          .sort((a,b)=>a.hora.localeCompare(b.hora));
   } catch(e) { console.warn('turnos fetch failed:', e); }
 
