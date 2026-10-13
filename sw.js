@@ -1,10 +1,9 @@
 /**
  * sw.js — Service Worker de LavaderoCF
  * Estrategia: Cache-First para assets estáticos, Network-First para rutas de datos.
- * Versión: 1.0.0
+ * Versión: 1.5.0
  */
-
-const CACHE_VERSION = 'lavaderocf-v1.4.0';
+const CACHE_VERSION = 'lavaderocf-v1.5.0';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 
@@ -37,6 +36,7 @@ const STATIC_ASSETS = [
   '/js/modules/recordatorios.js',
   '/js/modules/configuracion.js',
   '/js/modules/ia.js',
+  '/css/apple-inspired.css',
   '/js/data/vehiculos.js',
   '/js/utils/format.js',
   '/js/utils/csv.js',
@@ -44,6 +44,7 @@ const STATIC_ASSETS = [
   '/js/utils/calendar.js',
   '/js/utils/charts.js',
   '/assets/logo.jpg',
+  '/assets/logo-mark.jpg',
   '/assets/icons/icon-192.png',
   '/assets/icons/icon-512.png',
 ];
