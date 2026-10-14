@@ -733,12 +733,20 @@ document.addEventListener('keydown', e => {
 async function renderDashboard() {
   const el = $('#view-dashboard');
   const today = todayISO();
-  const [lavados, clientes, costos] = await Promise.all([
-    dbGetAll('lavados'), dbGetAll('clientes'), dbGetAll('costos')
+  const [lavados, clientes, costos, empleados, servicios, cierres] = await Promise.all([
+    dbGetAll('lavados'), dbGetAll('clientes'), dbGetAll('costos'), dbGetAll('empleados'), dbGetAll('servicios'), dbGetAll('cierres')
   ]);
   const hoy = lavados.filter(l => l.fechaInicio && l.fechaInicio.startsWith(today) && ['listo','archivado'].includes(l.estado));
   const ingHoy = hoy.reduce((s,l)=>s+(l.precio||0), 0);
-  const comHoy = hoy.reduce((s,l)=>s+(l.comisionMonto||0), 0);
+  const cajaHoyCerrada = cierres.some(c => c.fecha === today && c.estado === 'cerrado');
+  const comHoy = hoy.reduce((s,l)=>{
+    if (cajaHoyCerrada) return s + (l.comisionMonto || 0);
+    const servicio = servicios.find(svc => svc.id === l.servicioId);
+    const proyeccion = servicio
+      ? window.LavaderoComisiones.recalcularComisionesDelLavado(l, empleados, servicio)
+      : l;
+    return s + (proyeccion.comisionMonto || 0);
+  }, 0);
   const pendRecords = clientes.filter(c => {
     const ls = lavados.filter(l=>l.clienteId===c.id).sort((a,b)=>b.fechaInicio?.localeCompare(a.fechaInicio));
     return ls.length>0 && daysSince(ls[0].fechaInicio)>=30;
@@ -1874,13 +1882,20 @@ async function renderCierre() {
 }
 
 async function loadCierre(fecha) {
-  const [lavados, empleados, costos, cierres] = await Promise.all([
-    dbGetAll('lavados'), dbGetAll('empleados'), dbGetAll('costos'), dbGetAll('cierres')
+  const [lavados, empleados, costos, cierres, servicios] = await Promise.all([
+    dbGetAll('lavados'), dbGetAll('empleados'), dbGetAll('costos'), dbGetAll('cierres'), dbGetAll('servicios')
   ]);
 
   const cierreExistente = cierres.find(c => c.fecha === fecha && c.estado === 'cerrado');
+  const esHoy = fecha === todayISO();
   // Solo lavados del día con estado 'listo' (no archivados — archivados no aparecen)
-  const del = lavados.filter(l => l.fechaInicio?.startsWith(fecha) && ['listo','archivado'].includes(l.estado));
+  const lavadosDelDia = lavados.filter(l => l.fechaInicio?.startsWith(fecha) && ['listo','archivado'].includes(l.estado));
+  const del = esHoy && !cierreExistente
+    ? lavadosDelDia.map(l => {
+        const servicio = servicios.find(svc => svc.id === l.servicioId);
+        return servicio ? window.LavaderoComisiones.recalcularComisionesDelLavado(l, empleados, servicio) : l;
+      })
+    : lavadosDelDia;
   const costosDia = costos.filter(c => c.fecha === fecha);
   const totalCostos = costosDia.reduce((s, c) => s + (c.monto || 0), 0);
   const bruto = del.reduce((s, l) => s + (l.precio || 0), 0);
@@ -1905,8 +1920,6 @@ async function loadCierre(fecha) {
 
   const ct = $('#cierreContent');
   if (!ct) return;
-
-  const esHoy = fecha === todayISO();
 
   if (cierreExistente) {
     // Mostrar resumen del cierre ya realizado
@@ -2034,11 +2047,22 @@ async function loadHistorialCierres() {
 
 async function ejecutarCierreCaja() {
   const hoy = todayISO();
-  const [lavados, empleados, costos] = await Promise.all([
-    dbGetAll('lavados'), dbGetAll('empleados'), dbGetAll('costos')
+  const [lavados, empleados, costos, servicios, cierres] = await Promise.all([
+    dbGetAll('lavados'), dbGetAll('empleados'), dbGetAll('costos'), dbGetAll('servicios'), dbGetAll('cierres')
   ]);
 
-  const del = lavados.filter(l => l.fechaInicio?.startsWith(hoy) && ['listo','archivado'].includes(l.estado));
+  if (cierres.some(c => c.fecha === hoy && c.estado === 'cerrado')) {
+    toast('La caja de hoy ya fue cerrada', 'info');
+    await renderCierre();
+    return;
+  }
+
+  const del = lavados
+    .filter(l => l.fechaInicio?.startsWith(hoy) && ['listo','archivado'].includes(l.estado))
+    .map(l => {
+      const servicio = servicios.find(svc => svc.id === l.servicioId);
+      return servicio ? window.LavaderoComisiones.recalcularComisionesDelLavado(l, empleados, servicio) : l;
+    });
   if (del.length === 0) { toast('No hay lavados finalizados para cerrar', 'error'); return; }
 
   const costosDia = costos.filter(c => c.fecha === hoy);

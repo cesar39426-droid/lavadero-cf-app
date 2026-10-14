@@ -1,9 +1,9 @@
 /**
  * sw.js — Service Worker de LavaderoCF
  * Estrategia: Cache-First para assets estáticos, Network-First para rutas de datos.
- * Versión: 1.6.0
+ * Versión: 1.6.1
  */
-const CACHE_VERSION = 'lavaderocf-v1.6.0';
+const CACHE_VERSION = 'lavaderocf-v1.6.1';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 

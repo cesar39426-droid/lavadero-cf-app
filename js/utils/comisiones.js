@@ -88,12 +88,52 @@
       });
   }
 
+  function recalcularComisionesDelLavado(lavado, empleados, servicio) {
+    const guardadas = Array.isArray(lavado?.comisionesGrupal) ? lavado.comisionesGrupal : [];
+    if (!servicio) return { ...lavado, comisionesGrupal: guardadas };
+
+    const empleadosPorId = new Map((empleados || []).map(empleado => [empleado.id, empleado]));
+    const precio = Number(lavado?.precio) || 0;
+    let nuevas;
+
+    if (guardadas.length) {
+      nuevas = guardadas.map(comision => {
+        const empleado = empleadosPorId.get(comision.empleadoId);
+        if (!empleado) return comision;
+        const pct = obtenerTasaComision(empleado, servicio);
+        return {
+          ...comision,
+          nombre: empleado.nombre || comision.nombre,
+          pct,
+          monto: Math.round((precio * pct) / 100)
+        };
+      });
+    } else {
+      const empleado = empleadosPorId.get(lavado?.empleadoId);
+      if (!empleado) return { ...lavado, comisionesGrupal: guardadas };
+      const pct = obtenerTasaComision(empleado, servicio);
+      nuevas = [{
+        empleadoId: empleado.id,
+        nombre: empleado.nombre,
+        pct,
+        monto: Math.round((precio * pct) / 100)
+      }];
+    }
+
+    return {
+      ...lavado,
+      comisionesGrupal: nuevas,
+      comisionMonto: nuevas.reduce((total, comision) => total + (Number(comision.monto) || 0), 0)
+    };
+  }
+
   const api = Object.freeze({
     categoriaComision,
     tasasParaFormulario,
     tieneTasasPersonalizadas,
     obtenerTasaComision,
-    calcularComisionesGrupales
+    calcularComisionesGrupales,
+    recalcularComisionesDelLavado
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
