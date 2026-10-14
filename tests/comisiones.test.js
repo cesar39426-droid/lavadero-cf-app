@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {
   categoriaComision,
   tasasParaFormulario,
+  parsearTasasComision,
   tieneTasasPersonalizadas,
   obtenerTasaComision,
   calcularComisionesGrupales,
@@ -143,4 +144,11 @@ test('actualiza registros heredados de un empleado y preserva si falta el servic
 
   assert.equal(recalcularComisionesDelLavado(heredado, [marcos], null).comisionMonto, 1500);
   assert.equal(recalcularComisionesDelLavado(heredado, [], { nombre: 'Lavado Premium', comisionPct: 10 }).comisionMonto, 1500);
+});
+
+test('los campos vacíos heredan la comisión del servicio y las tasas propias se validan en pareja', () => {
+  assert.equal(parsearTasasComision('', ''), null);
+  assert.deepEqual(parsearTasasComision('0', '100'), { estandar: 0, otros: 100 });
+  assert.throws(() => parsearTasasComision('10', ''), /ambas tasas/);
+  assert.throws(() => parsearTasasComision('101', '5'), /entre 0 y 100/);
 });

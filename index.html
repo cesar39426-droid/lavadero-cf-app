@@ -2242,8 +2242,9 @@ function nuevoEmpleadoModal() {
     <div class="modal-title">+ Nuevo Empleado</div>
     <div class="input-group"><label class="input-label">Nombre *</label><input class="input" id="enNombre" placeholder="Carlos"/></div>
     <div class="input-group"><label class="input-label">Tipo</label><select class="input" id="enTipo"><option value="permanente">Permanente</option><option value="temporal">Temporal</option></select></div>
-    <div class="input-group"><label class="input-label">Comisión lavados estándar (%)</label><input class="input" id="enComisionEstandar" type="number" value="15" min="0" max="100" step="0.1"/></div>
-    <div class="input-group"><label class="input-label">Comisión Premium / tapizados / motor (%)</label><input class="input" id="enComisionOtros" type="number" value="10" min="0" max="100" step="0.1"/></div>
+    <div class="input-group"><label class="input-label">Comisión lavados estándar (%)</label><input class="input" id="enComisionEstandar" type="number" value="" placeholder="Según servicio" min="0" max="100" step="0.1"/></div>
+    <div class="input-group"><label class="input-label">Comisión Premium / tapizados / motor (%)</label><input class="input" id="enComisionOtros" type="number" value="" placeholder="Según servicio" min="0" max="100" step="0.1"/></div>
+    <p class="text-muted" style="font-size:.75rem;margin-bottom:12px">Dejá ambas vacías para usar la comisión de cada servicio. Completá las dos para establecer tasas propias.</p>
     <div class="input-group"><label class="input-label">PIN (4 dígitos) *</label><input class="input" id="enPin" type="tel" maxlength="4" placeholder="1234"/></div>
     <div class="form-actions">
       <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
@@ -2254,25 +2255,28 @@ function nuevoEmpleadoModal() {
 async function guardarEmpleado() {
   const nombre=$('#enNombre').value.trim();
   const pin=$('#enPin').value.trim();
-  const comisionEstandarRaw=$('#enComisionEstandar').value.trim();
-  const comisionOtrosRaw=$('#enComisionOtros').value.trim();
-  const comisionEstandar=Number(comisionEstandarRaw);
-  const comisionOtros=Number(comisionOtrosRaw);
+  let tasas;
+  try { tasas=window.LavaderoComisiones.parsearTasasComision($('#enComisionEstandar').value,$('#enComisionOtros').value); }
+  catch(error) { toast(error.message,'error'); return; }
   if(!nombre||pin.length!==4){toast('Nombre y PIN de 4 dígitos requeridos','error');return;}
-  if(!comisionEstandarRaw||!comisionOtrosRaw||![comisionEstandar,comisionOtros].every(p=>Number.isFinite(p)&&p>=0&&p<=100)){toast('Ingresá ambas comisiones entre 0 y 100%','error');return;}
-  await dbPut('empleados',{nombre,pin,comisionPct:comisionEstandar,comisionesPorCategoria:{estandar:comisionEstandar,otros:comisionOtros},rol:'empleado',tipo:$('#enTipo').value,activo:true});
+  const empleadoNuevo={nombre,pin,comisionPct:tasas?.estandar??15,rol:'empleado',tipo:$('#enTipo').value,activo:true};
+  if(tasas) empleadoNuevo.comisionesPorCategoria=tasas;
+  await dbPut('empleados',empleadoNuevo);
   closeModal(); toast('Empleado creado ✔','success'); await renderEmpleados();
 }
 async function editarEmpleadoModal(id) {
   const emps=await dbGetAll('empleados');
   const e=emps.find(x=>x.id===id); if(!e) return;
-  const tasas=window.LavaderoComisiones.tasasParaFormulario(e);
+  const tasas=window.LavaderoComisiones.tieneTasasPersonalizadas(e)
+    ? window.LavaderoComisiones.tasasParaFormulario(e)
+    : null;
   openModal(`
     <div class="modal-title">✏️ Editar Empleado</div>
     <p class="text-muted" style="font-size:.78rem;margin-bottom:10px">Al guardar, estos porcentajes individuales se aplican a esta persona y reemplazan las tasas generales del servicio.</p>
     <div class="input-group"><label class="input-label">Nombre</label><input class="input" id="epNombre" value="${e.nombre}"/></div>
-    <div class="input-group"><label class="input-label">Comisión lavados estándar (%)</label><input class="input" id="epComisionEstandar" type="number" value="${tasas.estandar}" min="0" max="100" step="0.1"/></div>
-    <div class="input-group"><label class="input-label">Comisión Premium / tapizados / motor (%)</label><input class="input" id="epComisionOtros" type="number" value="${tasas.otros}" min="0" max="100" step="0.1"/></div>
+    <div class="input-group"><label class="input-label">Comisión lavados estándar (%)</label><input class="input" id="epComisionEstandar" type="number" value="${tasas?.estandar??''}" placeholder="Según servicio" min="0" max="100" step="0.1"/></div>
+    <div class="input-group"><label class="input-label">Comisión Premium / tapizados / motor (%)</label><input class="input" id="epComisionOtros" type="number" value="${tasas?.otros??''}" placeholder="Según servicio" min="0" max="100" step="0.1"/></div>
+    <p class="text-muted" style="font-size:.75rem;margin-bottom:12px">Dejá ambas vacías para usar la comisión de cada servicio. Completá las dos para establecer tasas propias.</p>
     <div class="input-group"><label class="input-label">Nuevo PIN (dejar vacío si no cambia)</label><input class="input" id="epPin" type="tel" maxlength="4" placeholder="1234"/></div>
     <div class="form-actions">
       <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
@@ -2286,12 +2290,13 @@ async function guardarEdicionEmp(id) {
   const nombre=$('#epNombre').value.trim()||e.nombre;
   let pin=$('#epPin').value.trim();
   if(pin.length>0 && pin.length!==4){toast('PIN debe tener 4 dígitos','error');return;}
-  const comisionEstandarRaw=$('#epComisionEstandar').value.trim();
-  const comisionOtrosRaw=$('#epComisionOtros').value.trim();
-  const comisionEstandar=Number(comisionEstandarRaw);
-  const comisionOtros=Number(comisionOtrosRaw);
-  if(!comisionEstandarRaw||!comisionOtrosRaw||![comisionEstandar,comisionOtros].every(p=>Number.isFinite(p)&&p>=0&&p<=100)){toast('Ingresá ambas comisiones entre 0 y 100%','error');return;}
-  await dbPut('empleados',{...e, nombre, comisionPct:comisionEstandar, comisionesPorCategoria:{estandar:comisionEstandar,otros:comisionOtros}, pin: pin||e.pin});
+  let tasas;
+  try { tasas=window.LavaderoComisiones.parsearTasasComision($('#epComisionEstandar').value,$('#epComisionOtros').value); }
+  catch(error) { toast(error.message,'error'); return; }
+  const actualizado={...e,nombre,pin:pin||e.pin};
+  if(tasas){actualizado.comisionPct=tasas.estandar;actualizado.comisionesPorCategoria=tasas;}
+  else {delete actualizado.comisionesPorCategoria;delete actualizado.comisionOtrosPct;}
+  await dbPut('empleados',actualizado);
   closeModal(); toast('Empleado actualizado ✔','success'); await renderEmpleados();
 }
 window.nuevoEmpleadoModal = nuevoEmpleadoModal;

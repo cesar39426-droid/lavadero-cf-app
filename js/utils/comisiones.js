@@ -57,6 +57,22 @@
     };
   }
 
+  function parsearTasasComision(estandarRaw, otrosRaw) {
+    const estandarTexto = String(estandarRaw ?? '').trim();
+    const otrosTexto = String(otrosRaw ?? '').trim();
+    if (!estandarTexto && !otrosTexto) return null;
+    if (!estandarTexto || !otrosTexto) {
+      throw new RangeError('Completá ambas tasas o dejá las dos vacías para usar la tarifa del servicio.');
+    }
+
+    const estandar = tasaValida(estandarTexto);
+    const otros = tasaValida(otrosTexto);
+    if (estandar === null || otros === null) {
+      throw new RangeError('Las comisiones deben estar entre 0 y 100%.');
+    }
+    return { estandar, otros };
+  }
+
   function tieneTasasPersonalizadas(empleado) {
     return tasasConfiguradas(empleado) !== null;
   }
@@ -130,6 +146,7 @@
   const api = Object.freeze({
     categoriaComision,
     tasasParaFormulario,
+    parsearTasasComision,
     tieneTasasPersonalizadas,
     obtenerTasaComision,
     calcularComisionesGrupales,
