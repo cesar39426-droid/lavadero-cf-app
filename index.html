@@ -295,6 +295,7 @@ details summary::-webkit-details-marker {display:none}
 <!-- TOASTS -->
 <div id="toast-container"></div>
 
+<script src="/js/utils/comisiones.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  UTILS
@@ -538,31 +539,6 @@ async function seeds() {
       await dbPut('servicios', ns);
     }
   }
-  const lavsHoy = await dbGetAll('lavados');
-  const hoyStr = new Date().toISOString().slice(0,10);
-  const svcsActuales = await dbGetAll('servicios');
-  for (const l of lavsHoy) {
-    if (l.fechaInicio && l.fechaInicio.startsWith(hoyStr)) {
-      const svcRef = svcsActuales.find(s => s.id === l.servicioId);
-      if (svcRef && l.comisionesGrupal && l.comisionesGrupal.length > 0) {
-        let changed = false;
-        const newComs = l.comisionesGrupal.map(c => {
-          const expectedPct = svcRef.comisionPct !== undefined ? svcRef.comisionPct : 15;
-          if (c.pct !== expectedPct) {
-            c.pct = expectedPct;
-            c.monto = Math.round((l.precio * expectedPct) / 100);
-            changed = true;
-          }
-          return c;
-        });
-        if (changed) {
-          await dbPut('lavados', {...l, comisionesGrupal: newComs});
-        }
-      }
-    }
-  }
-  
-  
   // Setear Dueño a 2121 forzoso
   const empsAll = await dbGetAll('empleados');
   for (const e of empsAll) {
@@ -1240,15 +1216,9 @@ async function regConfirmar() {
       console.warn('TEST OK: No hay empleados activos (o solo hay dueños). La comisión grupal será 0.');
     }
 
-    const comisionesGrupal = empleadosActivos.map(e => {
-      const pct = svc.comisionPct !== undefined ? svc.comisionPct : (e.comisionPct ?? 15);
-      return {
-        empleadoId: e.id,
-        nombre: e.nombre,
-        pct: pct,
-        monto: Math.round((precioFinal * pct) / 100)
-      };
-    });
+    const comisionesGrupal = window.LavaderoComisiones.calcularComisionesGrupales(
+      empleadosActivos, svc, precioFinal
+    );
     const totalComisionMonto = comisionesGrupal.reduce((acc, c) => acc + c.monto, 0);
 
     await dbPut('lavados', {
@@ -2232,7 +2202,7 @@ async function renderEmpleados() {
           <div>
             <p class="fw-bold">${e.nombre} ${e.rol==='dueno'?'👑':''}</p>
             <p class="text-muted" style="font-size:.78rem">${e.tipo||''} · ${lavadosTotales} lavados · ${fmoney(ganancias)}</p>
-            ${e.rol!=='dueno'?`<p class="text-muted" style="font-size:.75rem;margin-top:2px">Comisión: <strong class="text-gold">${e.comisionPct??15}%</strong> por lavado</p>`:''}
+            ${e.rol!=='dueno'?(()=>{const comisionPersonalizada=window.LavaderoComisiones.tieneTasasPersonalizadas(e);const tasas=window.LavaderoComisiones.tasasParaFormulario(e);return `<p class="text-muted" style="font-size:.75rem;margin-top:2px">Comisión: <strong class="text-gold">${comisionPersonalizada?`${tasas.estandar}% estándar · ${tasas.otros}% otros`:'según tarifa del servicio'}</strong></p>`})():''}
           </div>
           <span class="chip ${e.activo?'chip-done':'chip-wait'}">${e.activo?'Activo':'Inactivo'}</span>
         </div>
@@ -2248,7 +2218,8 @@ function nuevoEmpleadoModal() {
     <div class="modal-title">+ Nuevo Empleado</div>
     <div class="input-group"><label class="input-label">Nombre *</label><input class="input" id="enNombre" placeholder="Carlos"/></div>
     <div class="input-group"><label class="input-label">Tipo</label><select class="input" id="enTipo"><option value="permanente">Permanente</option><option value="temporal">Temporal</option></select></div>
-    <div class="input-group"><label class="input-label">Comisión por lavado (%)</label><input class="input" id="enComision" type="number" value="15" min="0" max="100"/></div>
+    <div class="input-group"><label class="input-label">Comisión lavados estándar (%)</label><input class="input" id="enComisionEstandar" type="number" value="15" min="0" max="100" step="0.1"/></div>
+    <div class="input-group"><label class="input-label">Comisión Premium / tapizados / motor (%)</label><input class="input" id="enComisionOtros" type="number" value="10" min="0" max="100" step="0.1"/></div>
     <div class="input-group"><label class="input-label">PIN (4 dígitos) *</label><input class="input" id="enPin" type="tel" maxlength="4" placeholder="1234"/></div>
     <div class="form-actions">
       <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
@@ -2259,18 +2230,25 @@ function nuevoEmpleadoModal() {
 async function guardarEmpleado() {
   const nombre=$('#enNombre').value.trim();
   const pin=$('#enPin').value.trim();
-  const comisionPct=Number($('#enComision').value)||0;
+  const comisionEstandarRaw=$('#enComisionEstandar').value.trim();
+  const comisionOtrosRaw=$('#enComisionOtros').value.trim();
+  const comisionEstandar=Number(comisionEstandarRaw);
+  const comisionOtros=Number(comisionOtrosRaw);
   if(!nombre||pin.length!==4){toast('Nombre y PIN de 4 dígitos requeridos','error');return;}
-  await dbPut('empleados',{nombre,pin,comisionPct,rol:'empleado',tipo:$('#enTipo').value,activo:true});
+  if(!comisionEstandarRaw||!comisionOtrosRaw||![comisionEstandar,comisionOtros].every(p=>Number.isFinite(p)&&p>=0&&p<=100)){toast('Ingresá ambas comisiones entre 0 y 100%','error');return;}
+  await dbPut('empleados',{nombre,pin,comisionPct:comisionEstandar,comisionesPorCategoria:{estandar:comisionEstandar,otros:comisionOtros},rol:'empleado',tipo:$('#enTipo').value,activo:true});
   closeModal(); toast('Empleado creado ✔','success'); await renderEmpleados();
 }
 async function editarEmpleadoModal(id) {
   const emps=await dbGetAll('empleados');
   const e=emps.find(x=>x.id===id); if(!e) return;
+  const tasas=window.LavaderoComisiones.tasasParaFormulario(e);
   openModal(`
     <div class="modal-title">✏️ Editar Empleado</div>
+    <p class="text-muted" style="font-size:.78rem;margin-bottom:10px">Al guardar, estos porcentajes individuales se aplican a esta persona y reemplazan las tasas generales del servicio.</p>
     <div class="input-group"><label class="input-label">Nombre</label><input class="input" id="epNombre" value="${e.nombre}"/></div>
-    <div class="input-group"><label class="input-label">Comisión (%)</label><input class="input" id="epComision" type="number" value="${e.comisionPct??15}" min="0" max="100"/></div>
+    <div class="input-group"><label class="input-label">Comisión lavados estándar (%)</label><input class="input" id="epComisionEstandar" type="number" value="${tasas.estandar}" min="0" max="100" step="0.1"/></div>
+    <div class="input-group"><label class="input-label">Comisión Premium / tapizados / motor (%)</label><input class="input" id="epComisionOtros" type="number" value="${tasas.otros}" min="0" max="100" step="0.1"/></div>
     <div class="input-group"><label class="input-label">Nuevo PIN (dejar vacío si no cambia)</label><input class="input" id="epPin" type="tel" maxlength="4" placeholder="1234"/></div>
     <div class="form-actions">
       <button class="btn btn-secondary btn-full" onclick="closeModal()">Cancelar</button>
@@ -2284,9 +2262,12 @@ async function guardarEdicionEmp(id) {
   const nombre=$('#epNombre').value.trim()||e.nombre;
   let pin=$('#epPin').value.trim();
   if(pin.length>0 && pin.length!==4){toast('PIN debe tener 4 dígitos','error');return;}
-  const comisionPct=Number($('#epComision').value)||0;
-  
-  await dbPut('empleados',{...e, nombre, comisionPct, pin: pin||e.pin});
+  const comisionEstandarRaw=$('#epComisionEstandar').value.trim();
+  const comisionOtrosRaw=$('#epComisionOtros').value.trim();
+  const comisionEstandar=Number(comisionEstandarRaw);
+  const comisionOtros=Number(comisionOtrosRaw);
+  if(!comisionEstandarRaw||!comisionOtrosRaw||![comisionEstandar,comisionOtros].every(p=>Number.isFinite(p)&&p>=0&&p<=100)){toast('Ingresá ambas comisiones entre 0 y 100%','error');return;}
+  await dbPut('empleados',{...e, nombre, comisionPct:comisionEstandar, comisionesPorCategoria:{estandar:comisionEstandar,otros:comisionOtros}, pin: pin||e.pin});
   closeModal(); toast('Empleado actualizado ✔','success'); await renderEmpleados();
 }
 window.nuevoEmpleadoModal = nuevoEmpleadoModal;
@@ -3023,11 +3004,9 @@ async function confirmarTurnoLlegada(id) {
   const svc=svcs.find(s=>s.id===t.servicioId);
   const user=auth.get();
   const emps=(await dbGetAll('empleados')).filter(e=>e.activo===true&&e.rol!=='dueno');
-  const comisionesGrupal=emps.map(e=>({
-    empleadoId:e.id, nombre:e.nombre,
-    pct:svc?.comisionPct??e.comisionPct??15,
-    monto:Math.round(((t.precio||svc?.precio||0)*(svc?.comisionPct??e.comisionPct??15))/100)
-  }));
+  const comisionesGrupal=window.LavaderoComisiones.calcularComisionesGrupales(
+    emps, svc || { nombre:t.servicioNombre, comisionPct:15 }, t.precio||svc?.precio||0
+  );
   await dbPut('lavados',{
     clienteId:t.clienteId, clienteNombre:t.clienteNombre, clienteTelefono:t.clienteTelefono,
     patente:t.patente||'', marcaVehiculo:t.vehiculoMarca||t.marcaVehiculo||'', modeloVehiculo:t.vehiculoModelo||t.modeloVehiculo||'', tipoVehiculo:t.tipoVehiculo, vehiculoCategoria:t.vehiculoCategoria||'',
