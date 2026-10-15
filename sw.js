@@ -1,10 +1,9 @@
 /**
  * sw.js — Service Worker de LavaderoCF
  * Estrategia: Cache-First para assets estáticos, Network-First para rutas de datos.
- * Versión: 1.5.0
+* Versión: 1.6.1
  */
-
-const CACHE_VERSION = 'lavaderocf-v1.5.0';
+const CACHE_VERSION = 'lavaderocf-v1.6.1';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 
@@ -18,10 +17,37 @@ const STATIC_ASSETS = [
   '/css/components.css',
   '/css/layout.css',
   '/css/animations.css',
-  // Runtime canónico: index.html + estos dos módulos ES.
+  // Runtime canónico: index.html + estos módulos ES.
+  '/js/app.js',
+  '/js/router.js',
+  '/js/auth.js',
+  '/js/db/db.js',
+  '/js/db/schema.js',
+  '/js/db/seeds.js',
+  '/js/modules/login.js',
+  '/js/modules/clientes.js',
+  '/js/modules/registro.js',
+  '/js/modules/vehiculos-dia.js',
+  '/js/modules/turnos.js',
+  '/js/modules/dashboard.js',
+  '/js/modules/cierre-caja.js',
+  '/js/modules/costos.js',
+  '/js/modules/empleados.js',
+  '/js/modules/servicios.js',
+  '/js/modules/recordatorios.js',
+  '/js/modules/configuracion.js',
+  '/js/modules/ia.js',
+  '/css/apple-inspired.css',
   '/js/data/vehiculos.js',
-  '/js/domain/booking-rules.mjs',
+  '/js/utils/format.js',
+  '/js/utils/csv.js',
+  '/js/utils/whatsapp.js',
+  '/js/utils/calendar.js',
+  '/js/utils/charts.js',
+  '/js/utils/comisiones.cjs',
+  '/js/domain/booking-rules.mjs'
   '/assets/logo.jpg',
+  '/assets/logo-mark.jpg',
   '/assets/icons/icon-192.png',
   '/assets/icons/icon-512.png',
 ];

@@ -1,0 +1,158 @@
+(function (root) {
+  'use strict';
+
+  const PERFILES_POR_NOMBRE = {
+    brandon: { estandar: 15, otros: 10 },
+    marcos: { estandar: 10, otros: 5 }
+  };
+
+  function normalizarTexto(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+  }
+
+  function categoriaComision(servicio) {
+    const nombre = normalizarTexto(typeof servicio === 'string'
+      ? servicio
+      : servicio?.nombre || servicio?.servicioNombre);
+
+    if (/premium|tapizado|motor/.test(nombre)) return 'otros';
+    if (/lavado estandar|lavado completo|solo exterior|solo interior|\bmoto\b/.test(nombre)) {
+      return 'estandar';
+    }
+    return null;
+  }
+
+  function tasaValida(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const rate = Number(value);
+    return Number.isFinite(rate) && rate >= 0 && rate <= 100 ? rate : null;
+  }
+
+  function tasasConfiguradas(empleado) {
+    const guardadas = empleado?.comisionesPorCategoria;
+    const estandarGuardada = tasaValida(guardadas?.estandar);
+    const otrosGuardada = tasaValida(guardadas?.otros);
+    if (estandarGuardada !== null || otrosGuardada !== null) {
+      return {
+        estandar: estandarGuardada ?? otrosGuardada,
+        otros: otrosGuardada ?? estandarGuardada
+      };
+    }
+
+    const perfilNombre = PERFILES_POR_NOMBRE[normalizarTexto(empleado?.nombre)];
+    return perfilNombre ? { ...perfilNombre } : null;
+  }
+
+  function tasasParaFormulario(empleado) {
+    const configuradas = tasasConfiguradas(empleado);
+    if (configuradas) return configuradas;
+    const tasaAnterior = tasaValida(empleado?.comisionPct) ?? 15;
+    return {
+      estandar: tasaAnterior,
+      otros: tasaValida(empleado?.comisionOtrosPct) ?? tasaAnterior
+    };
+  }
+
+  function parsearTasasComision(estandarRaw, otrosRaw) {
+    const estandarTexto = String(estandarRaw ?? '').trim();
+    const otrosTexto = String(otrosRaw ?? '').trim();
+    if (!estandarTexto && !otrosTexto) return null;
+    if (!estandarTexto || !otrosTexto) {
+      throw new RangeError('Completá ambas tasas o dejá las dos vacías para usar la tarifa del servicio.');
+    }
+
+    const estandar = tasaValida(estandarTexto);
+    const otros = tasaValida(otrosTexto);
+    if (estandar === null || otros === null) {
+      throw new RangeError('Las comisiones deben estar entre 0 y 100%.');
+    }
+    return { estandar, otros };
+  }
+
+  function tieneTasasPersonalizadas(empleado) {
+    return tasasConfiguradas(empleado) !== null;
+  }
+
+  function obtenerTasaComision(empleado, servicio) {
+    const categoria = categoriaComision(servicio);
+    const tasas = tasasConfiguradas(empleado);
+    if (categoria && tasas && tasaValida(tasas[categoria]) !== null) {
+      return tasaValida(tasas[categoria]);
+    }
+
+    const tasaServicio = tasaValida(servicio?.comisionPct);
+    if (tasaServicio !== null) return tasaServicio;
+    return tasaValida(empleado?.comisionPct) ?? 15;
+  }
+
+  function calcularComisionesGrupales(empleados, servicio, precio) {
+    const montoBase = Number(precio) || 0;
+    return (empleados || [])
+      .filter(empleado => empleado?.activo === true && empleado?.rol !== 'dueno')
+      .map(empleado => {
+        const pct = obtenerTasaComision(empleado, servicio);
+        return {
+          empleadoId: empleado.id,
+          nombre: empleado.nombre,
+          pct,
+          monto: Math.round((montoBase * pct) / 100)
+        };
+      });
+  }
+
+  function recalcularComisionesDelLavado(lavado, empleados, servicio) {
+    const guardadas = Array.isArray(lavado?.comisionesGrupal) ? lavado.comisionesGrupal : [];
+    if (!servicio) return { ...lavado, comisionesGrupal: guardadas };
+
+    const empleadosPorId = new Map((empleados || []).map(empleado => [empleado.id, empleado]));
+    const precio = Number(lavado?.precio) || 0;
+    let nuevas;
+
+    if (guardadas.length) {
+      nuevas = guardadas.map(comision => {
+        const empleado = empleadosPorId.get(comision.empleadoId);
+        if (!empleado) return comision;
+        const pct = obtenerTasaComision(empleado, servicio);
+        return {
+          ...comision,
+          nombre: empleado.nombre || comision.nombre,
+          pct,
+          monto: Math.round((precio * pct) / 100)
+        };
+      });
+    } else {
+      const empleado = empleadosPorId.get(lavado?.empleadoId);
+      if (!empleado) return { ...lavado, comisionesGrupal: guardadas };
+      const pct = obtenerTasaComision(empleado, servicio);
+      nuevas = [{
+        empleadoId: empleado.id,
+        nombre: empleado.nombre,
+        pct,
+        monto: Math.round((precio * pct) / 100)
+      }];
+    }
+
+    return {
+      ...lavado,
+      comisionesGrupal: nuevas,
+      comisionMonto: nuevas.reduce((total, comision) => total + (Number(comision.monto) || 0), 0)
+    };
+  }
+
+  const api = Object.freeze({
+    categoriaComision,
+    tasasParaFormulario,
+    parsearTasasComision,
+    tieneTasasPersonalizadas,
+    obtenerTasaComision,
+    calcularComisionesGrupales,
+    recalcularComisionesDelLavado
+  });
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.LavaderoComisiones = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
