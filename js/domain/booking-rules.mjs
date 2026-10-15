@@ -101,10 +101,10 @@ export function isMembershipEligibleService(serviceName = '') {
   return name.includes('lavado estandar') || name.includes('lavado completo');
 }
 
-export function membershipBenefitFor({ serviceName, basePrice, previousCount, discount = MEMBERSHIP_DISCOUNT }) {
+export function membershipBenefitFor({ serviceName, basePrice, previousCount, membershipActive = false, discount = MEMBERSHIP_DISCOUNT }) {
   const price = Math.max(0, Number(basePrice) || 0);
   const count = Math.max(0, Number(previousCount) || 0);
-  const eligible = isMembershipEligibleService(serviceName);
+  const eligible = Boolean(membershipActive) && isMembershipEligibleService(serviceName);
   const applies = eligible && count === MEMBERSHIP_THRESHOLD - 1;
   const appliedDiscount = applies ? Math.min(discount, price) : 0;
 

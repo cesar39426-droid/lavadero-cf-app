@@ -1214,16 +1214,23 @@ function fechaMesLocal(date = new Date()) {
 async function calcularMembresia({ clienteId, patente, servicioNombre, precioBase, fecha = new Date(), excludeId = null }) {
   const month = fechaMesLocal(fecha);
   const lavados = await dbGetAll('lavados');
+  const vehiclePlate = bookingRules?.normalizeVehiclePlate(patente) || String(patente || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+  const cliente = clienteId ? await dbGet('clientes', clienteId) : null;
+  const membresia = cliente?.membresia;
+  const membershipActive = Boolean(membresia?.activa && (membresia.porPatente || []).some(p =>
+    (bookingRules?.normalizeVehiclePlate(p) || String(p || '').replace(/[^a-z0-9]/gi, '').toUpperCase()) === vehiclePlate
+  ));
   const previousCount = bookingRules
     ? bookingRules.monthlyVehicleWashCount(lavados, { clienteId, patente, month, excludeId })
     : 0;
   const benefit = bookingRules
-    ? bookingRules.membershipBenefitFor({ serviceName: servicioNombre, basePrice: precioBase, previousCount })
+    ? bookingRules.membershipBenefitFor({ serviceName: servicioNombre, basePrice: precioBase, previousCount, membershipActive })
     : { eligible: false, applies: false, previousCount, visitNumber: previousCount + 1, discount: 0, priceBase: precioBase, priceFinal: precioBase, message: '' };
   return {
     ...benefit,
     month,
-    vehiclePlate: bookingRules?.normalizeVehiclePlate(patente) || String(patente || '').replace(/[^a-z0-9]/gi, '').toUpperCase()
+    vehiclePlate,
+    membershipActive
   };
 }
 
@@ -1543,6 +1550,7 @@ async function renderDia() {
         </div>
         <p class="text-muted" style="font-size:.82rem">${l.servicioNombre||'—'} · ${fmoney(l.precio)}</p>
         <p class="text-muted" style="font-size:.78rem">🚗 ${l.marcaVehiculo || l.modeloVehiculo || 'Marca no registrada'}</p>
+        ${['listo','archivado'].includes(l.estado) ? `<details class="card" style="margin:10px 0 0;padding:10px 12px;background:var(--surface2)"><summary style="cursor:pointer;font-size:.78rem;color:var(--gold)">Ver detalle del lavado</summary><div style="font-size:.75rem;line-height:1.7;margin-top:8px;color:var(--muted)">Inicio: ${l.fechaInicio ? new Date(l.fechaInicio).toLocaleString('es-AR') : '—'}<br>Fin: ${l.fechaFin ? new Date(l.fechaFin).toLocaleString('es-AR') : '—'}<br>Precio base: ${fmoney(l.precioBase || l.precio)} · Descuento: ${fmoney(l.descuentoMembresia || 0)}<br>Empleado: ${esc(l.comisionesGrupal?.map(c => c.nombre).join(', ') || l.empleadoNombre || '—')}<br>Notas: ${esc(l.notas || 'Sin notas')}</div></details>` : ''}
         <div class="flex-between mt-sm">
           <span class="timer" id="timer-${l.id}">${l.estado==='en_proceso'?elapsedStr(l.fechaInicio):''}</span>
           <div class="flex-gap">
@@ -1784,6 +1792,10 @@ async function verCliente(id) {
     <div class="section-head">Membresía del mes (${mesActual})</div>
     <div class="card card-gold" style="margin-bottom:12px;font-size:.82rem">Al llegar al 4.º Lavado Estándar o Completo del mismo vehículo se descuentan <strong>$5.000</strong>.</div>
     ${membresiaRows}
+    ${auth.isDueno() ? `<div class="card" style="margin:12px 0">
+      <p class="text-muted" style="font-size:.78rem;margin-bottom:8px">La membresía se activa manualmente cuando el cliente acuerda el beneficio con el dueño. Se aplica por patente, solo al cuarto Lavado Estándar del mes.</p>
+      <button class="btn btn-primary btn-full" onclick="gestionarMembresiaModal('${id}')">⭐ ${c.membresia?.activa ? 'Editar membresía activa' : 'Dar de alta membresía'}</button>
+    </div>` : ''}
     <div class="section-head">Historial</div>
     ${lc.length===0?'<p class="text-muted" style="font-size:.85rem">Sin historial</p>':lc.map(l=>`
       <div class="list-row" style="margin-bottom:6px">
@@ -1802,6 +1814,45 @@ async function verCliente(id) {
     </div>
   `);
 }
+async function gestionarMembresiaModal(id) {
+  if (!auth.isDueno()) { toast('Solo el dueño puede gestionar membresías.', 'error'); return; }
+  const c = (await dbGetAll('clientes')).find(x => x.id === id);
+  if (!c) return;
+  const patentes = [...new Set((c.patentes || []).filter(Boolean))];
+  if (!patentes.length) { toast('Primero registrá al menos una patente del cliente.', 'error'); return; }
+  const activas = new Set(c.membresia?.porPatente || []);
+  openModal(`
+    <div class="modal-title">⭐ Membresía de ${esc(c.nombre)}</div>
+    <p class="text-muted" style="font-size:.8rem;margin-bottom:12px">Marcá las patentes incluidas en el acuerdo. El beneficio descuenta $5.000 en el cuarto Lavado Estándar de cada mes.</p>
+    <div class="input-group">
+      ${patentes.map((p, i) => `<label style="display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--surface2)"><input class="membresiaPatente" type="checkbox" value="${esc(p)}" ${activas.has(p) ? 'checked' : ''}/> <strong>${esc(p)}</strong></label>`).join('')}
+    </div>
+    <div class="form-actions mt-md">
+      <button class="btn btn-secondary btn-full" onclick="verCliente('${esc(id)}')">Cancelar</button>
+      <button class="btn btn-primary btn-full" onclick="guardarMembresiaCliente('${esc(id)}')">Guardar membresía</button>
+    </div>
+  `);
+}
+async function guardarMembresiaCliente(id) {
+  if (!auth.isDueno()) return;
+  const c = (await dbGetAll('clientes')).find(x => x.id === id);
+  if (!c) return;
+  const porPatente = [...document.querySelectorAll('.membresiaPatente:checked')].map(el => el.value);
+  const now = new Date().toISOString();
+  const anterior = c.membresia || {};
+  await dbPut('clientes', { ...c, membresia: {
+    activa: porPatente.length > 0,
+    desde: anterior.desde || now,
+    porPatente,
+    actualizadoEn: now
+  }});
+  toast(porPatente.length ? 'Membresía activada ✔' : 'Membresía desactivada', porPatente.length ? 'success' : 'info');
+  await verCliente(id);
+  await renderClientes();
+}
+window.gestionarMembresiaModal = gestionarMembresiaModal;
+window.guardarMembresiaCliente = guardarMembresiaCliente;
+
 async function editarClienteModal(id) {
   const todos = await dbGetAll('clientes');
   const c = todos.find(x=>x.id===id); if(!c) return;
@@ -2168,6 +2219,7 @@ async function renderCierre() {
         <div style="font-size:2rem">✅</div>
         <p class="fw-bold" style="margin-top:8px">Caja cerrada para hoy</p>
         <p class="text-muted" style="font-size:.82rem">Cerrado a las ${new Date(cierreHoy.cerradoEn).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</p>
+        ${cierreHoy.origen === 'auto-20:00' ? '<p style="font-size:.75rem;color:var(--gold);margin-top:6px">Cierre automático de resguardo a las 20:00. El detalle queda en el historial.</p>' : ''}
       </div>
     ` : ''}
 
@@ -2415,6 +2467,50 @@ async function ejecutarCierreCaja() {
   );
 }
 
+async function autoCerrarCajaSiCorresponde() {
+  if (!auth.get()) return false;
+  const ahora = new Date();
+  if (ahora.getHours() < 20) return false;
+  const hoy = todayISO();
+  const [cierres, lavados, empleados, costos] = await Promise.all([
+    dbGetAll('cierres'), dbGetAll('lavados'), dbGetAll('empleados'), dbGetAll('costos')
+  ]);
+  if (cierres.some(c => c.fecha === hoy && c.estado === 'cerrado')) return false;
+  const del = lavados.filter(l => l.fechaInicio?.startsWith(hoy) && ['listo','archivado'].includes(l.estado));
+  if (!del.length) return false;
+  const costosDia = costos.filter(c => c.fecha === hoy);
+  const totalCostos = costosDia.reduce((sum, c) => sum + (c.monto || 0), 0);
+  const bruto = del.reduce((sum, l) => sum + (l.precio || 0), 0);
+  const comis = del.reduce((sum, l) => sum + (l.comisionMonto || 0), 0);
+  const liquidacion = {};
+  del.forEach(l => {
+    if (l.comisionesGrupal?.length) l.comisionesGrupal.forEach(c => {
+      if (!liquidacion[c.empleadoId]) liquidacion[c.empleadoId] = { nombre:c.nombre, total:0, cant:0 };
+      liquidacion[c.empleadoId].total += c.monto || 0; liquidacion[c.empleadoId].cant++;
+    });
+    else if (l.empleadoId) {
+      if (!liquidacion[l.empleadoId]) liquidacion[l.empleadoId] = { nombre:empleados.find(e=>e.id===l.empleadoId)?.nombre||'—', total:0, cant:0 };
+      liquidacion[l.empleadoId].total += l.comisionMonto || 0; liquidacion[l.empleadoId].cant++;
+    }
+  });
+  const snapshot = del.map(l => ({
+    id:l.id, cliente:l.clienteNombre, telefono:l.clienteTelefono, patente:l.patente,
+    marca:l.marcaVehiculo, modelo:l.modeloVehiculo, servicio:l.servicioNombre,
+    precioBase:l.precioBase || l.precio, descuentoMembresia:l.descuentoMembresia || 0,
+    precio:l.precio, estado:l.estado, empleadoId:l.empleadoId, empleadoNombre:l.empleadoNombre,
+    fechaInicio:l.fechaInicio, fechaFin:l.fechaFin, notas:l.notas || '', comisionesGrupal:l.comisionesGrupal || []
+  }));
+  await dbPut('cierres', {
+    fecha:hoy, cerradoEn:ahora.toISOString(), estado:'cerrado', origen:'auto-20:00',
+    totalLavados:del.length, bruto, comisiones:comis, costos:totalCostos,
+    neto:bruto-comis-totalCostos, liquidacion, lavadosIds:del.map(l=>l.id), snapshot
+  });
+  await Promise.all(del.map(l => dbPut('lavados', {...l, estado:'archivado'})));
+  await dbCfg('aviso_cierre_auto', { fecha:hoy, creadoEn:ahora.toISOString(), totalLavados:del.length });
+  toast(`Caja cerrada automáticamente a las 20:00 · ${del.length} lavado${del.length===1?'':'s'} archivado${del.length===1?'':'s'}`, 'info');
+  return true;
+}
+
 async function exportCierre(fecha) {
   fecha = fecha || todayISO();
   const [lavados, cierres] = await Promise.all([dbGetAll('lavados'), dbGetAll('cierres')]);
@@ -2518,7 +2614,7 @@ async function renderEmpleados() {
         </div>
         ${e.rol!=='dueno'?`<div class="flex-gap mt-sm">
           <button class="btn btn-sm btn-secondary" onclick="editarEmpleadoModal('${e.id}')">✏️ Editar</button>
-          <button class="btn btn-sm ${e.activo?'btn-danger':'btn-secondary'}" onclick="${e.activo?`desactivarEmp('${e.id}')`:`activarEmp('${e.id}')`}">${e.activo?'Desactivar':'Reactivar'}</button>
+          <button class="btn btn-sm ${e.activo?'btn-danger':'btn-secondary'}" onclick="${e.activo?`desactivarEmp('${e.id}')`:`activarEmp('${e.id}')`}">${e.activo?'Retirar del equipo':'Reactivar'}</button>
         </div>`:''}
       </div>`;}).join('')}
   `;
@@ -2576,7 +2672,7 @@ window.guardarEdicionEmp = guardarEdicionEmp;
 window.desactivarEmp = desactivarEmp;
 window.activarEmp = activarEmp;
 async function desactivarEmp(id) {
-  confirmModal('¿Desactivar este empleado? (Se conserva su historial)',async()=>{
+  confirmModal('¿Retirar este empleado del equipo? Se conservarán su historial y sus comisiones.',async()=>{
     const emps=await dbGetAll('empleados');
     const e=emps.find(x=>x.id===id); if(!e) return;
     await dbPut('empleados',{...e,activo:false});
@@ -3285,7 +3381,8 @@ async function renderTurnos() {
   const todosTurnos=await dbGetAll('turnos');
   const activeStates=bookingRules?.ACTIVE_TURNO_STATES||['pendiente','confirmado'];
   const activos=todosTurnos.filter(t=>activeStates.includes(t.estado));
-  const visibles=todosTurnos.filter(t=>activeStates.includes(t.estado)||t.estado==='ingresado');
+  // Los turnos ingresados quedan trazables en el lavado asociado, pero no vuelven a aparecer como pendientes.
+  const visibles=todosTurnos.filter(t=>activeStates.includes(t.estado));
   [...new Set(visibles.filter(t=>t.fecha>=hoy).map(t=>t.fecha))].forEach(fecha=>{
     if(!dias.includes(fecha)) dias.push(fecha);
   });
@@ -3524,9 +3621,14 @@ async function appInit() {
       showScreen('login');
     }
   }
-  // Seeds en background (no bloquea el primer render)
-  seeds().catch(e => console.warn('Seeds error:', e));
-  migrateActiveTurnoLocks().catch(e => console.warn('Turno lock migration error:', e));
+  // Seeds y migraciones idempotentes. El auto-cierre solo opera sobre sesión de dueño.
+  seeds().then(async () => {
+    await migrateActiveTurnoLocks();
+    await autoCerrarCajaSiCorresponde();
+  }).catch(e => console.warn('Seeds/migration error:', e));
+  if (!window._cajaAutoTimer) {
+    window._cajaAutoTimer = setInterval(() => autoCerrarCajaSiCorresponde().catch(e => console.warn('Auto-close error:', e)), 60000);
+  }
 }
 
 appInit();

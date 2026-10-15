@@ -54,7 +54,7 @@ test('cuenta solo lavados completados del mismo vehículo y mes', () => {
 
 test('aplica $5.000 en el cuarto lavado del vehículo', () => {
   const benefit = membershipBenefitFor({
-    serviceName: 'Lavado Estándar', basePrice: 35000, previousCount: 3
+    serviceName: 'Lavado Estándar', basePrice: 35000, previousCount: 3, membershipActive: true
   });
 
   assert.equal(benefit.applies, true);
@@ -63,20 +63,26 @@ test('aplica $5.000 en el cuarto lavado del vehículo', () => {
   assert.match(benefit.message, /4º lavado/);
 });
 
+test('no aplica si el cliente no tiene membresía activa', () => {
+  const benefit = membershipBenefitFor({ serviceName: 'Lavado Estándar', basePrice: 30000, previousCount: 3, membershipActive: false });
+  assert.equal(benefit.eligible, false);
+  assert.equal(benefit.discount, 0);
+});
+
 test('no aplica antes de cuatro lavados ni a servicios no elegibles', () => {
   assert.equal(membershipBenefitFor({
-    serviceName: 'Lavado Estándar', basePrice: 30000, previousCount: 2
+    serviceName: 'Lavado Estándar', basePrice: 30000, previousCount: 2, membershipActive: true
   }).discount, 0);
   assert.equal(membershipBenefitFor({
-    serviceName: 'Lavado Premium', basePrice: 80000, previousCount: 3
+    serviceName: 'Lavado Premium', basePrice: 80000, previousCount: 3, membershipActive: true
   }).discount, 0);
   assert.equal(membershipBenefitFor({
-    serviceName: 'Lavado de Motor', basePrice: 50000, previousCount: 3
+    serviceName: 'Lavado de Motor', basePrice: 50000, previousCount: 3, membershipActive: true
   }).discount, 0);
 });
 test('no activa la membresía para Tapizado Full', () => {
   const benefit = membershipBenefitFor({
-    serviceName: 'Tapizado Full', basePrice: 150000, previousCount: 3
+    serviceName: 'Tapizado Full', basePrice: 150000, previousCount: 3, membershipActive: true
   });
   assert.equal(benefit.eligible, false);
   assert.equal(benefit.discount, 0);
