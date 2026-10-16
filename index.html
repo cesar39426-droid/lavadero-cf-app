@@ -409,6 +409,7 @@ async function dbOpen() {
   if (_firestore) return _firestore;
   // Importar Firebase via CDN (compat mode para sintaxis sencilla)
   const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+  const { getAuth, signInAnonymously } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
   const {
     getFirestore, collection, doc,
     getDoc, getDocs, setDoc, deleteDoc,
@@ -420,6 +421,11 @@ async function dbOpen() {
   } else {
     _fbApp = getApps()[0];
   }
+  // Las reglas de Firestore requieren una identidad autenticada. La sesión anónima
+  // permite mantener el PIN interno de la app sin exponer las colecciones públicamente.
+  const firebaseAuth = getAuth(_fbApp);
+  if (!firebaseAuth.currentUser) await signInAnonymously(firebaseAuth);
+  window._firebaseAuth = firebaseAuth;
   _firestore = getFirestore(_fbApp);
 
   // Guardar helpers en el scope global para que las funciones de abajo los usen
