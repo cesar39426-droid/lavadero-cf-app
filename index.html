@@ -824,10 +824,17 @@ async function initLogin() {
   const lastUser = localStorage.getItem('lcf_lastuser');
   if (lastUser && $('#loginUser')) $('#loginUser').value = lastUser;
   if ($('#loginPass')) $('#loginPass').value = '';
-  const ver = await dbCfg('version');
-  if (ver) {
+  try {
+    const ver = await dbCfg('version');
+    if (ver) {
+      const verEl = document.querySelector('.auth-ver');
+      if(verEl) verEl.textContent = `v${ver}`;
+    }
+  } catch (error) {
+    // El login no debe desaparecer si Firestore está temporalmente bloqueado.
+    console.warn('No se pudo leer la versión desde Firestore; se muestra el login:', error?.message || error);
     const verEl = document.querySelector('.auth-ver');
-    if(verEl) verEl.textContent = `v${ver}`;
+    if (verEl) verEl.textContent = 'Modo de conexión pendiente';
   }
 }
 
@@ -836,7 +843,14 @@ async function loginSubmit() {
   const pass = $('#loginPass')?.value.trim();
   if (!userStr || !pass) { toast('Completá usuario y contraseña', 'error'); return; }
   
-  const emps = await dbGetAll('empleados');
+  let emps;
+  try {
+    emps = await dbGetAll('empleados');
+  } catch (error) {
+    console.error('Login data error:', error);
+    toast('No se pudo conectar con los datos del lavadero. Revisá la conexión o las reglas de Firebase.', 'error');
+    return;
+  }
   const cleanStr = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   const user = emps.find(e => e.activo && cleanStr(e.nombre) === cleanStr(userStr));
   
@@ -3649,7 +3663,12 @@ async function appInit() {
     renderReserva();
   } else {
     // Login o Main (Persistencia de sesión)
-    await initLogin();
+    try {
+      await initLogin();
+    } catch (error) {
+      console.error('Login initialization error:', error);
+    }
+    // Siempre activar una pantalla: una falla de Firestore no puede dejar el shell en blanco.
     if (auth.get()) {
       goTo('main');
     } else {
