@@ -3010,15 +3010,32 @@ function cerrarSesion() {
 let resStep=1, resServicio=null, resVehiculo='auto', resFecha=null, resHora=null;
 let resVehiculoMarca='', resVehiculoModelo='', resVehiculoCategoria='auto';
 let _resSvcs=[], _resPrecio=0, _resPrecioMax=0, _resSvcNombre='';
-let vehicleCatalog=null, bookingRules=null;
+let vehicleCatalog=null, bookingRules=null, _resPublicFallback=false;
+const RESERVATION_FALLBACK_SERVICES = [
+  {id:'fallback-estandar', nombre:'Lavado Estándar', precioAuto:30000, precioCamioneta:35000, precio4x4:40000, precio:30000, variaSegunVehiculo:true, descripcion:'Lavado exterior artesanal, aspirado profundo y acondicionado de plásticos interiores', activo:true},
+  {id:'fallback-premium', nombre:'Lavado Premium', precioAuto:80000, precioCamioneta:95000, precio4x4:110000, precio:80000, variaSegunVehiculo:true, descripcion:'Lavado exterior artesanal, aspirado profundo, detallado y limpieza y desinfección con máquina de vapor', activo:true},
+  {id:'fallback-motor', nombre:'Lavado de Motor', precioAuto:50000, precioCamioneta:50000, precio4x4:50000, precio:50000, variaSegunVehiculo:false, descripcion:'Limpieza técnica y desinfección con máquina de vapor', activo:true},
+  {id:'fallback-tapizado', nombre:'Tapizado Clásica', precioAuto:150000, precioCamioneta:150000, precio4x4:150000, precio:150000, variaSegunVehiculo:false, descripcion:'Limpieza profunda de tapizados in-situ', activo:true},
+  {id:'fallback-full', nombre:'Tapizado Full', precioAuto:150000, precioCamioneta:150000, precio4x4:150000, precio:150000, variaSegunVehiculo:false, descripcion:'Retiro de asientos y limpieza del piso completo del vehículo', activo:true},
+  {id:'fallback-moto110', nombre:'Moto 110cc', precioMoto:16000, precio:16000, variaSegunVehiculo:false, descripcion:'Lavado artesanal de moto 110cc', activo:true},
+  {id:'fallback-moto150', nombre:'Moto 150cc', precioMoto:18000, precio:18000, variaSegunVehiculo:false, descripcion:'Lavado artesanal de moto 150cc', activo:true},
+  {id:'fallback-moto250', nombre:'Moto 250cc', precioMoto:20000, precio:20000, variaSegunVehiculo:false, descripcion:'Lavado artesanal de moto 250cc', activo:true}
+];
 function resLegacyTypeForCategory(category) {
   return {auto:'auto',familiar:'camioneta',suv:'4x4',moto:'moto'}[category] || category || 'auto';
 }
 
 async function renderReserva() {
   resStep=1; resServicio=null; resVehiculo='auto'; resVehiculoCategoria='auto'; resVehiculoMarca=''; resVehiculoModelo=''; resFecha=null; resHora=null;
-  _resPrecio=0; _resPrecioMax=0; _resSvcNombre='';
-  _resSvcs = (await dbGetAll('servicios')).filter(s=>s.activo!==false);
+  _resPrecio=0; _resPrecioMax=0; _resSvcNombre=''; _resPublicFallback=false;
+  try {
+    _resSvcs = (await dbGetAll('servicios')).filter(s=>s.activo!==false);
+    if (!_resSvcs.length) throw new Error('No hay servicios publicados');
+  } catch (error) {
+    _resPublicFallback=true;
+    _resSvcs = RESERVATION_FALLBACK_SERVICES;
+    console.warn('Reserva pública en modo catálogo local:', error?.message || error);
+  }
   await renderResStep();
 }
 
@@ -3032,6 +3049,7 @@ async function renderResStep() {
         <div class="step">3</div>
       </div>
       <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:16px">Paso 1 de 3 &mdash; Elegí tu vehículo y servicio</p>
+      ${_resPublicFallback ? '<div class="card" style="border-color:var(--gold);font-size:.78rem;margin-bottom:14px">Podés consultar servicios y precios ahora. Para confirmar el turno, te vamos a derivar a WhatsApp.</div>' : ''}
       <div class="section-head">¿Qué vehículo traés?</div>
       <p style="color:var(--muted);font-size:.78rem;margin:-4px 0 10px">Buscá marca o modelo para ver la categoría y el precio exacto.</p>
       <div class="vehicle-search-container">
@@ -3219,7 +3237,9 @@ window.resSelServicio=resSelServicio;
 async function resSelFecha(fecha){
   resFecha=fecha; resHora=null;
   document.querySelectorAll('.date-btn').forEach(b=>b.classList.toggle('selected',b.id===`rfd-${fecha}`));
-  const turnos=await dbGetAll('turnos');
+  let turnos=[];
+  try { turnos=await dbGetAll('turnos'); }
+  catch (error) { _resPublicFallback=true; console.warn('No se pudo consultar disponibilidad pública:', error?.message || error); }
   const dur=bookingRules?.durationMinutesForVehicle(resVehiculoCategoria || resVehiculo) || 60;
   const d=new Date(fecha+'T12:00:00');
   const dom=d.getDay()===0;
@@ -3279,6 +3299,15 @@ async function resConfirmar(){
   if(!patente){toast('Ingresá la patente del vehículo','error');return;}
   if(!resFecha||!resHora){toast('Seleccioná día y horario','error');return;}
   if(!resServicio){toast('Seleccioná un servicio','error');return;}
+  if (_resPublicFallback) {
+    const svcLocal=_resSvcs.find(item=>item.id===resServicio);
+    const tipoLabel={auto:'Auto / Sedán / Hatchback',familiar:'Familiar chico / Rural',suv:'SUV / Crossover / Pick-up / 4x4',camioneta:'Camioneta familiar','4x4':'Camioneta 4x4/SUV',camioneta4x4:'SUV / Pick-up / 4x4',moto:'Moto'}[resVehiculo]||resVehiculo;
+    const precioLocal=svcLocal ? (resVehiculo==='moto' ? (svcLocal.precioMoto||svcLocal.precio||0) : (vehicleCatalog?.getServicePrice(svcLocal,resVehiculo)||svcLocal.precio||0)) : 0;
+    const waMsg=encodeURIComponent(`Hola LavaderoCF! Quiero solicitar un turno\n✅ ${nombre}\n📞 ${tel}\n🚗 ${tipoLabel}\n🔤 Patente: ${patente}\n🔧 ${svcLocal?.nombre||_resSvcNombre}\n📅 ${fdateDay(resFecha)}\n🕐 ${resHora} hs\n💰 ${fmoney(precioLocal)}`);
+    const ct=document.getElementById('reservaContent');
+    if(ct) ct.innerHTML=`<div style="text-align:center;padding:14px 0"><div style="font-size:2.5rem">📲</div><h3 class="font-serif text-gold" style="font-size:1.2rem">Completá tu reserva por WhatsApp</h3><p style="color:var(--muted);font-size:.82rem">El catálogo está disponible y el dueño confirma la disponibilidad del horario.</p><a href="https://wa.me/543487704362?text=${waMsg}" target="_blank" style="display:flex;align-items:center;justify-content:center;background:#25D366;color:#fff;padding:14px;border-radius:var(--r-md);font-weight:600;text-decoration:none;margin:16px 0">Enviar solicitud por WhatsApp</a><button class="btn btn-secondary btn-full" onclick="renderReserva()">Volver al catálogo</button></div>`;
+    return;
+  }
   const todos=await dbGetAll('clientes');
   let cli=todos.find(x=>x.telefono===tel);
   if(!cli) {
